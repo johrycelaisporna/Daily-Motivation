@@ -87,53 +87,45 @@ def check_birthdays():
         last_name = ""
         dob = ""
         
-        # Debug: print all columns to see structure
-        print(f"\nChecking item: {item.get('name', 'Unknown')}")
-        
         # Get column values
         for col in item['column_values']:
             col_id = col.get('id', '')
             col_text = (col.get('text') or '').strip()
             col_value = col.get('value') or ''
             
-            print(f"  Column ID: {col_id}, Text: {col_text}")
-            
-            # Match columns by ID or text content
+            # Match columns by ID
             if 'first' in col_id.lower():
                 first_name = col_text
             elif 'last' in col_id.lower():
                 last_name = col_text
             elif 'birth' in col_id.lower() or 'dob' in col_id.lower():
                 dob = col_text
-                print(f"  Found DOB text: {dob}")
                 # Also try parsing from value if text is empty
                 if not dob and col_value:
                     try:
                         value_obj = json.loads(col_value)
                         if 'date' in value_obj:
                             dob = value_obj['date']
-                            print(f"  Parsed DOB from value: {dob}")
                     except:
                         pass
         
         # Check if birthday matches today
         if dob:
             try:
-                # Try different date formats
-                for fmt in ['%m/%d/%Y', '%Y-%m-%d', '%d/%m/%Y', '%m-%d-%Y', '%m/%d/%y']:
+                # Try different date formats - YYYY-MM-DD first (Monday.com format)
+                for fmt in ['%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y', '%m-%d-%Y', '%m/%d/%y']:
                     try:
                         birth_date = datetime.strptime(dob, fmt)
-                        print(f"  Parsed date: {birth_date.month}/{birth_date.day}")
                         if birth_date.month == today_month and birth_date.day == today_day:
                             full_name = f"{first_name} {last_name}".strip()
                             if full_name:
                                 birthdays_today.append(full_name)
-                                print(f"  ✅ BIRTHDAY MATCH: {full_name}")
+                                print(f"✅ Found birthday: {full_name}")
                         break
                     except ValueError:
                         continue
             except Exception as e:
-                print(f"⚠️ Could not parse date for {first_name} {last_name}: {dob} - Error: {e}")
+                print(f"⚠️ Could not parse date: {dob}")
     
     # Post to Slack if there are birthdays
     if birthdays_today:
