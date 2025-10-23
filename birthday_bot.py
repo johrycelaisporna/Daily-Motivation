@@ -2,7 +2,7 @@ import os
 import json
 import urllib.request
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 # Configuration
 MONDAY_API_TOKEN = os.environ.get('MONDAY_API_TOKEN')
@@ -50,11 +50,12 @@ def check_birthdays():
     """Check for birthdays today"""
     print("🎂 Checking for birthdays today...")
     
-    # Get today's date
-    today = datetime.now()
+    # Get today's date in Manila timezone (UTC+8)
+    manila_tz = timezone(timedelta(hours=8))
+    today = datetime.now(manila_tz)
     today_month = today.month
     today_day = today.day
-    print(f"Today is: {today_month}/{today_day}")
+    print(f"Today is: {today_month}/{today_day} (Manila time)")
     
     # Query Monday.com board
     query = f'''
@@ -101,15 +102,12 @@ def check_birthdays():
                 last_name = col_text
             elif 'date_of_birth' in col_id.lower():
                 dob = col_text
-                if dob and first_name:
-                    print(f"Found person: {first_name} {last_name}, DOB: {dob}")
                 # Also try parsing from value if text is empty
                 if not dob and col_value:
                     try:
                         value_obj = json.loads(col_value)
                         if 'date' in value_obj:
                             dob = value_obj['date']
-                            print(f"Found DOB from value: {dob}")
                     except:
                         pass
         
@@ -122,17 +120,14 @@ def check_birthdays():
                     try:
                         birth_date = datetime.strptime(dob, fmt)
                         parsed = True
-                        print(f"  Parsed {dob} as {birth_date.month}/{birth_date.day}")
                         if birth_date.month == today_month and birth_date.day == today_day:
                             full_name = f"{first_name} {last_name}".strip()
                             if full_name:
                                 birthdays_today.append(full_name)
-                                print(f"  ✅ MATCH! Birthday today: {full_name}")
+                                print(f"✅ MATCH! Birthday today: {full_name}")
                         break
                     except ValueError:
                         continue
-                if not parsed:
-                    print(f"  Could not parse date: {dob}")
             except Exception as e:
                 print(f"⚠️ Error checking {first_name} {last_name}: {e}")
     
