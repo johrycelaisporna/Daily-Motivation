@@ -89,8 +89,8 @@ def check_birthdays():
         
         # Get column values
         for col in item['column_values']:
-            col_text = col.get('text', '').strip()
-            col_value = col.get('value', '')
+            col_text = (col.get('text') or '').strip()
+            col_value = col.get('value') or ''
             
             # Try to identify columns by their content
             if col.get('id') == 'name' or 'first' in col.get('id', '').lower():
