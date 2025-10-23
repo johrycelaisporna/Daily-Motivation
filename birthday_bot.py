@@ -159,18 +159,22 @@ def check_celebrations():
                 except Exception as e:
                     print(f"⚠️ Error checking birthday for {full_name}: {e}")
     
-    # Check Anniversary Board
-    print("\n--- Checking Anniversary Board ---")
+    # Check Anniversary Board - Only Active Employees group
+    print("\n--- Checking Anniversary Board (Active Employees only) ---")
     anniversary_query = f'''
     {{
       boards(ids: {ANNIVERSARY_BOARD_ID}) {{
-        items_page {{
-          items {{
-            name
-            column_values {{
-              id
-              text
-              value
+        groups {{
+          id
+          title
+          items_page {{
+            items {{
+              name
+              column_values {{
+                id
+                text
+                value
+              }}
             }}
           }}
         }}
@@ -181,52 +185,55 @@ def check_celebrations():
     anniversary_result = query_monday(anniversary_query)
     
     if anniversary_result.get('data'):
-        items = anniversary_result['data']['boards'][0]['items_page']['items']
+        groups = anniversary_result['data']['boards'][0]['groups']
         
-        for item in items:
-            first_name = ""
-            last_name = ""
-            start_date = ""
+        # Find the "Active Employees" group
+        for group in groups:
+            group_title = group.get('title', '').lower()
+            print(f"Found group: {group.get('title')}")
             
-            for col in item['column_values']:
-                col_id = col.get('id', '')
-                col_text = (col.get('text') or '').strip()
-                col_value = col.get('value') or ''
+            if 'active' in group_title and 'employee' in group_title:
+                print(f"✅ Checking Active Employees group")
+                items = group['items_page']['items']
                 
-                if 'first' in col_id.lower():
-                    first_name = col_text
-                elif 'last' in col_id.lower():
-                    last_name = col_text
-                elif 'start_date' in col_id.lower() or 'adaca' in col_id.lower():
-                    start_date = col_text
-                    if not start_date and col_value:
+                for item in items:
+                    name = item.get('name', '').strip()
+                    start_date = ""
+                    
+                    for col in item['column_values']:
+                        col_id = col.get('id', '')
+                        col_text = (col.get('text') or '').strip()
+                        col_value = col.get('value') or ''
+                        
+                        if 'adaca' in col_id.lower() and 'start' in col_id.lower():
+                            start_date = col_text
+                            if not start_date and col_value:
+                                try:
+                                    value_obj = json.loads(col_value)
+                                    if 'date' in value_obj:
+                                        start_date = value_obj['date']
+                                except:
+                                    pass
+                    
+                    if start_date and name:
+                        print(f"Checking: {name} - Start Date: {start_date}")
                         try:
-                            value_obj = json.loads(col_value)
-                            if 'date' in value_obj:
-                                start_date = value_obj['date']
-                        except:
-                            pass
-            
-            full_name = f"{first_name} {last_name}".strip()
-            
-            if start_date and full_name:
-                try:
-                    for fmt in ['%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y', '%m-%d-%Y', '%m/%d/%y']:
-                        try:
-                            hire_date = datetime.strptime(start_date, fmt)
-                            if hire_date.month == today_month and hire_date.day == today_day:
-                                years = calculate_years(hire_date, today)
-                                if years > 0:
-                                    anniversaries_today.append({
-                                        'name': full_name,
-                                        'years': years
-                                    })
-                                    print(f"✅ Work Anniversary: {full_name} - {years} years")
-                            break
-                        except ValueError:
-                            continue
-                except Exception as e:
-                    print(f"⚠️ Error checking anniversary for {full_name}: {e}")
+                            for fmt in ['%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y', '%m-%d-%Y', '%m/%d/%y']:
+                                try:
+                                    hire_date = datetime.strptime(start_date, fmt)
+                                    if hire_date.month == today_month and hire_date.day == today_day:
+                                        years = calculate_years(hire_date, today)
+                                        if years > 0:
+                                            anniversaries_today.append({
+                                                'name': name,
+                                                'years': years
+                                            })
+                                            print(f"✅ Work Anniversary: {name} - {years} years")
+                                    break
+                                except ValueError:
+                                    continue
+                        except Exception as e:
+                            print(f"⚠️ Error checking anniversary for {name}: {e}")
     
     # Post birthdays to Slack
     if birthdays_today:
