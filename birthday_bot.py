@@ -182,58 +182,75 @@ def check_celebrations():
     }}
     '''
     
+    print("Querying anniversary board...")
     anniversary_result = query_monday(anniversary_query)
     
-    if anniversary_result.get('data'):
+    print(f"Anniversary query result: {json.dumps(anniversary_result, indent=2)[:500]}...")
+    
+    if anniversary_result.get('data') and anniversary_result['data'].get('boards'):
         groups = anniversary_result['data']['boards'][0]['groups']
+        print(f"Found {len(groups)} groups")
         
         # Find the "Active Employees" group
         for group in groups:
-            group_title = group.get('title', '').lower()
-            print(f"Found group: {group.get('title')}")
+            group_title = group.get('title', '')
+            print(f"Group: '{group_title}'")
             
-            if 'active' in group_title and 'employee' in group_title:
-                print(f"✅ Checking Active Employees group")
+            if 'active' in group_title.lower() and 'employee' in group_title.lower():
+                print(f"✅ Found Active Employees group!")
                 items = group['items_page']['items']
+                print(f"Found {len(items)} items in Active Employees")
                 
                 for item in items:
                     name = item.get('name', '').strip()
                     start_date = ""
+                    
+                    print(f"\n  Item: {name}")
                     
                     for col in item['column_values']:
                         col_id = col.get('id', '')
                         col_text = (col.get('text') or '').strip()
                         col_value = col.get('value') or ''
                         
-                        if 'adaca' in col_id.lower() and 'start' in col_id.lower():
+                        print(f"    Column ID: {col_id}, Text: {col_text}")
+                        
+                        if ('adaca' in col_id.lower() or 'start' in col_id.lower()) and 'date' in col_id.lower():
                             start_date = col_text
+                            print(f"    Found start date: {start_date}")
                             if not start_date and col_value:
                                 try:
                                     value_obj = json.loads(col_value)
                                     if 'date' in value_obj:
                                         start_date = value_obj['date']
+                                        print(f"    Parsed start date from value: {start_date}")
                                 except:
                                     pass
                     
                     if start_date and name:
-                        print(f"Checking: {name} - Start Date: {start_date}")
+                        print(f"  Processing: {name} - Start Date: {start_date}")
                         try:
                             for fmt in ['%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y', '%m-%d-%Y', '%m/%d/%y']:
                                 try:
                                     hire_date = datetime.strptime(start_date, fmt)
+                                    print(f"    Parsed as: {hire_date.month}/{hire_date.day}/{hire_date.year}")
                                     if hire_date.month == today_month and hire_date.day == today_day:
                                         years = calculate_years(hire_date, today)
+                                        print(f"    Years: {years}")
                                         if years > 0:
                                             anniversaries_today.append({
                                                 'name': name,
                                                 'years': years
                                             })
-                                            print(f"✅ Work Anniversary: {name} - {years} years")
+                                            print(f"  ✅ MATCH! Work Anniversary: {name} - {years} years")
                                     break
                                 except ValueError:
                                     continue
                         except Exception as e:
-                            print(f"⚠️ Error checking anniversary for {name}: {e}")
+                            print(f"  ⚠️ Error checking anniversary for {name}: {e}")
+            else:
+                print(f"  Skipping group: {group_title}")
+    else:
+        print("❌ No data returned from anniversary board query")
     
     # Post birthdays to Slack
     if birthdays_today:
