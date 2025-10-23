@@ -54,6 +54,7 @@ def check_birthdays():
     today = datetime.now()
     today_month = today.month
     today_day = today.day
+    print(f"Today is: {today_month}/{today_day}")
     
     # Query Monday.com board
     query = f'''
@@ -84,62 +85,4 @@ def check_birthdays():
     
     for item in items:
         first_name = ""
-        last_name = ""
-        dob = ""
-        
-        # Get column values
-        for col in item['column_values']:
-            col_id = col.get('id', '')
-            col_text = (col.get('text') or '').strip()
-            col_value = col.get('value') or ''
-            
-            # Match columns by ID
-            if 'first' in col_id.lower():
-                first_name = col_text
-            elif 'last' in col_id.lower():
-                last_name = col_text
-            elif 'birth' in col_id.lower() or 'dob' in col_id.lower():
-                dob = col_text
-                # Also try parsing from value if text is empty
-                if not dob and col_value:
-                    try:
-                        value_obj = json.loads(col_value)
-                        if 'date' in value_obj:
-                            dob = value_obj['date']
-                    except:
-                        pass
-        
-        # Check if birthday matches today
-        if dob:
-            try:
-                # Try different date formats - YYYY-MM-DD first (Monday.com format)
-                for fmt in ['%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y', '%m-%d-%Y', '%m/%d/%y']:
-                    try:
-                        birth_date = datetime.strptime(dob, fmt)
-                        if birth_date.month == today_month and birth_date.day == today_day:
-                            full_name = f"{first_name} {last_name}".strip()
-                            if full_name:
-                                birthdays_today.append(full_name)
-                                print(f"✅ Found birthday: {full_name}")
-                        break
-                    except ValueError:
-                        continue
-            except Exception as e:
-                print(f"⚠️ Could not parse date: {dob}")
-    
-    # Post to Slack if there are birthdays
-    if birthdays_today:
-        print(f"🎉 Found {len(birthdays_today)} birthday(s) today!")
-        
-        for name in birthdays_today:
-            message = f"🎂 *Happy Birthday, {name}!* 🎉\n\nWishing you an amazing day filled with joy and celebration! Have a wonderful year ahead! 🎈"
-            
-            if post_to_slack(message):
-                print(f"✅ Posted birthday message for {name}")
-            else:
-                print(f"❌ Failed to post message for {name}")
-    else:
-        print("ℹ️ No birthdays today")
-
-if __name__ == "__main__":
-    check_birthdays()
+        last_name =
