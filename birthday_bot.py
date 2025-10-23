@@ -3,12 +3,32 @@ import json
 import urllib.request
 import urllib.parse
 from datetime import datetime, timezone, timedelta
+import random
 
 # Configuration
 MONDAY_API_TOKEN = os.environ.get('MONDAY_API_TOKEN')
 SLACK_BOT_TOKEN = os.environ.get('SLACK_BOT_TOKEN')
-BOARD_ID = "6329174559"
+BIRTHDAY_BOARD_ID = "6329174559"
+ANNIVERSARY_BOARD_ID = "6329303796"
 SLACK_CHANNEL = "celebrations"
+
+# Birthday message templates
+BIRTHDAY_MESSAGES = [
+    "🎂 *Happy Birthday, {name}!* 🎉\n\nWishing you an amazing day filled with joy and celebration! Have a wonderful year ahead! 🎈",
+    "🎂 *Happy Birthday, {name}!* 🎉\n\nHope your special day is as incredible as you are! Enjoy every moment! 🥳",
+    "🎂 *It's {name}'s Birthday!* 🎉\n\nWishing you a fantastic day filled with laughter, love, and cake! 🍰",
+    "🎂 *Happy Birthday, {name}!* 🎉\n\nMay this year bring you success, happiness, and everything you've been dreaming of! 🌟",
+    "🎂 *Celebrating {name} today!* 🎉\n\nHappy Birthday! Here's to another year of amazing achievements and great memories! 🎈"
+]
+
+# Work anniversary message templates
+ANNIVERSARY_MESSAGES = [
+    "🎊 *Happy Work Anniversary, {name}!* 🎉\n\nCelebrating {years} with Adaca today! Thank you for your dedication and contributions to the team. Here's to many more! 🥳",
+    "🎊 *Congratulations, {name}!* 🎉\n\nToday marks {years} with Adaca! Thank you for being an incredible part of our journey. We're lucky to have you on the team! 🙌",
+    "🎊 *{years} of awesome!* 🎉\n\nHappy Work Anniversary, {name}! Thanks for bringing your A-game to Adaca every day. Let's celebrate! 🥳🎈",
+    "🎊 *{name} is celebrating {years} with us!* 🎉\n\nYour hard work and passion make Adaca better every day. Thank you for everything you do! 🌟",
+    "🎊 *Cheers to {name}!* 🎉\n\n{years} with Adaca and still going strong! We appreciate all your contributions to the team. Here's to the journey ahead! 🚀"
+]
 
 def query_monday(query):
     """Query Monday.com API"""
@@ -46,21 +66,40 @@ def post_to_slack(message):
         result = json.loads(response.read().decode('utf-8'))
         return result.get("ok")
 
-def check_birthdays():
-    """Check for birthdays today"""
-    print("🎂 Checking for birthdays today...")
+def calculate_years(start_date, today):
+    """Calculate years of service"""
+    years = today.year - start_date.year
+    # Adjust if anniversary hasn't occurred yet this year
+    if (today.month, today.day) < (start_date.month, start_date.day):
+        years -= 1
+    return years
+
+def format_years(years):
+    """Format years text"""
+    if years == 1:
+        return "1 year"
+    else:
+        return f"{years} years"
+
+def check_celebrations():
+    """Check for birthdays and work anniversaries today"""
+    print("🎂 Checking for celebrations today...")
     
     # Get today's date in Manila timezone (UTC+8)
     manila_tz = timezone(timedelta(hours=8))
     today = datetime.now(manila_tz)
     today_month = today.month
     today_day = today.day
-    print(f"Today is: {today_month}/{today_day} (Manila time)")
+    print(f"Today is: {today_month}/{today_day}/{today.year} (Manila time)")
     
-    # Query Monday.com board
-    query = f'''
+    birthdays_today = []
+    anniversaries_today = []
+    
+    # Check Birthday Board
+    print("\n--- Checking Birthday Board ---")
+    birthday_query = f'''
     {{
-      boards(ids: {BOARD_ID}) {{
+      boards(ids: {BIRTHDAY_BOARD_ID}) {{
         items_page {{
           items {{
             name
@@ -75,75 +114,146 @@ def check_birthdays():
     }}
     '''
     
-    result = query_monday(query)
+    birthday_result = query_monday(birthday_query)
     
-    if not result.get('data'):
-        print("❌ Error getting data from Monday.com")
-        return
-    
-    items = result['data']['boards'][0]['items_page']['items']
-    birthdays_today = []
-    
-    for item in items:
-        first_name = ""
-        last_name = ""
-        dob = ""
+    if birthday_result.get('data'):
+        items = birthday_result['data']['boards'][0]['items_page']['items']
         
-        # Get column values
-        for col in item['column_values']:
-            col_id = col.get('id', '')
-            col_text = (col.get('text') or '').strip()
-            col_value = col.get('value') or ''
+        for item in items:
+            first_name = ""
+            last_name = ""
+            dob = ""
             
-            # Match columns by ID
-            if 'first' in col_id.lower():
-                first_name = col_text
-            elif 'last' in col_id.lower():
-                last_name = col_text
-            elif 'date_of_birth' in col_id.lower():
-                dob = col_text
-                # Also try parsing from value if text is empty
-                if not dob and col_value:
-                    try:
-                        value_obj = json.loads(col_value)
-                        if 'date' in value_obj:
-                            dob = value_obj['date']
-                    except:
-                        pass
-        
-        # Check if birthday matches today
-        if dob and first_name:
-            try:
-                # Try different date formats - YYYY-MM-DD first (Monday.com format)
-                parsed = False
-                for fmt in ['%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y', '%m-%d-%Y', '%m/%d/%y']:
-                    try:
-                        birth_date = datetime.strptime(dob, fmt)
-                        parsed = True
-                        if birth_date.month == today_month and birth_date.day == today_day:
-                            full_name = f"{first_name} {last_name}".strip()
-                            if full_name:
+            for col in item['column_values']:
+                col_id = col.get('id', '')
+                col_text = (col.get('text') or '').strip()
+                col_value = col.get('value') or ''
+                
+                if 'first' in col_id.lower():
+                    first_name = col_text
+                elif 'last' in col_id.lower():
+                    last_name = col_text
+                elif 'date_of_birth' in col_id.lower():
+                    dob = col_text
+                    if not dob and col_value:
+                        try:
+                            value_obj = json.loads(col_value)
+                            if 'date' in value_obj:
+                                dob = value_obj['date']
+                        except:
+                            pass
+            
+            full_name = f"{first_name} {last_name}".strip()
+            
+            if dob and full_name:
+                try:
+                    for fmt in ['%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y', '%m-%d-%Y', '%m/%d/%y']:
+                        try:
+                            birth_date = datetime.strptime(dob, fmt)
+                            if birth_date.month == today_month and birth_date.day == today_day:
                                 birthdays_today.append(full_name)
-                                print(f"✅ MATCH! Birthday today: {full_name}")
-                        break
-                    except ValueError:
-                        continue
-            except Exception as e:
-                print(f"⚠️ Error checking {first_name} {last_name}: {e}")
+                                print(f"✅ Birthday: {full_name}")
+                            break
+                        except ValueError:
+                            continue
+                except Exception as e:
+                    print(f"⚠️ Error checking birthday for {full_name}: {e}")
     
-    # Post to Slack if there are birthdays
-    if birthdays_today:
-        print(f"🎉 Found {len(birthdays_today)} birthday(s) today!")
+    # Check Anniversary Board
+    print("\n--- Checking Anniversary Board ---")
+    anniversary_query = f'''
+    {{
+      boards(ids: {ANNIVERSARY_BOARD_ID}) {{
+        items_page {{
+          items {{
+            name
+            column_values {{
+              id
+              text
+              value
+            }}
+          }}
+        }}
+      }}
+    }}
+    '''
+    
+    anniversary_result = query_monday(anniversary_query)
+    
+    if anniversary_result.get('data'):
+        items = anniversary_result['data']['boards'][0]['items_page']['items']
         
-        for name in birthdays_today:
-            message = f"🎂 *Happy Birthday, {name}!* 🎉\n\nWishing you an amazing day filled with joy and celebration! Have a wonderful year ahead! 🎈"
+        for item in items:
+            first_name = ""
+            last_name = ""
+            start_date = ""
             
+            for col in item['column_values']:
+                col_id = col.get('id', '')
+                col_text = (col.get('text') or '').strip()
+                col_value = col.get('value') or ''
+                
+                if 'first' in col_id.lower():
+                    first_name = col_text
+                elif 'last' in col_id.lower():
+                    last_name = col_text
+                elif 'start_date' in col_id.lower() or 'adaca' in col_id.lower():
+                    start_date = col_text
+                    if not start_date and col_value:
+                        try:
+                            value_obj = json.loads(col_value)
+                            if 'date' in value_obj:
+                                start_date = value_obj['date']
+                        except:
+                            pass
+            
+            full_name = f"{first_name} {last_name}".strip()
+            
+            if start_date and full_name:
+                try:
+                    for fmt in ['%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y', '%m-%d-%Y', '%m/%d/%y']:
+                        try:
+                            hire_date = datetime.strptime(start_date, fmt)
+                            if hire_date.month == today_month and hire_date.day == today_day:
+                                years = calculate_years(hire_date, today)
+                                if years > 0:
+                                    anniversaries_today.append({
+                                        'name': full_name,
+                                        'years': years
+                                    })
+                                    print(f"✅ Work Anniversary: {full_name} - {years} years")
+                            break
+                        except ValueError:
+                            continue
+                except Exception as e:
+                    print(f"⚠️ Error checking anniversary for {full_name}: {e}")
+    
+    # Post birthdays to Slack
+    if birthdays_today:
+        print(f"\n🎉 Found {len(birthdays_today)} birthday(s) today!")
+        for name in birthdays_today:
+            message = random.choice(BIRTHDAY_MESSAGES).format(name=name)
             if post_to_slack(message):
                 print(f"✅ Posted birthday message for {name}")
             else:
-                print(f"❌ Failed to post message for {name}")
-    else:
-        print("ℹ️ No birthdays today")
+                print(f"❌ Failed to post birthday message for {name}")
+    
+    # Post anniversaries to Slack
+    if anniversaries_today:
+        print(f"\n🎊 Found {len(anniversaries_today)} work anniversary/anniversaries today!")
+        for person in anniversaries_today:
+            years_text = format_years(person['years'])
+            message = random.choice(ANNIVERSARY_MESSAGES).format(
+                name=person['name'],
+                years=years_text
+            )
+            if post_to_slack(message):
+                print(f"✅ Posted anniversary message for {person['name']}")
+            else:
+                print(f"❌ Failed to post anniversary message for {person['name']}")
+    
+    if not birthdays_today and not anniversaries_today:
+        print("\nℹ️ No celebrations today")
 
 if __name__ == "__main__":
-    check_birthdays()
+    check_celebrations()
