@@ -69,7 +69,6 @@ def post_to_slack(message):
 def calculate_years(start_date, today):
     """Calculate years of service"""
     years = today.year - start_date.year
-    # Adjust if anniversary hasn't occurred yet this year
     if (today.month, today.day) < (start_date.month, start_date.day):
         years -= 1
     return years
@@ -83,7 +82,7 @@ def format_years(years):
 
 def check_celebrations():
     """Check for birthdays and work anniversaries today"""
-    print("🎂 Checking for celebrations today...")
+    print("🎉 Checking for celebrations today...")
     
     # Get today's date in Manila timezone (UTC+8)
     manila_tz = timezone(timedelta(hours=8))
@@ -96,7 +95,6 @@ def check_celebrations():
     anniversaries_today = []
     
     # Check Birthday Board
-    print("\n--- Checking Birthday Board ---")
     birthday_query = f'''
     {{
       boards(ids: {BIRTHDAY_BOARD_ID}) {{
@@ -152,15 +150,13 @@ def check_celebrations():
                             birth_date = datetime.strptime(dob, fmt)
                             if birth_date.month == today_month and birth_date.day == today_day:
                                 birthdays_today.append(full_name)
-                                print(f"✅ Birthday: {full_name}")
                             break
                         except ValueError:
                             continue
-                except Exception as e:
-                    print(f"⚠️ Error checking birthday for {full_name}: {e}")
+                except:
+                    pass
     
     # Check Anniversary Board - Only Active Employees group
-    print("\n--- Checking Anniversary Board (Active Employees only) ---")
     anniversary_query = f'''
     {{
       boards(ids: {ANNIVERSARY_BOARD_ID}) {{
@@ -182,89 +178,65 @@ def check_celebrations():
     }}
     '''
     
-    print("Querying anniversary board...")
     anniversary_result = query_monday(anniversary_query)
-    
-    print(f"Anniversary query result: {json.dumps(anniversary_result, indent=2)[:500]}...")
     
     if anniversary_result.get('data') and anniversary_result['data'].get('boards'):
         groups = anniversary_result['data']['boards'][0]['groups']
-        print(f"Found {len(groups)} groups")
         
-        # Find the "Active Employees" group
         for group in groups:
             group_title = group.get('title', '')
-            print(f"Group: '{group_title}'")
             
             if 'active' in group_title.lower() and 'employee' in group_title.lower():
-                print(f"✅ Found Active Employees group!")
                 items = group['items_page']['items']
-                print(f"Found {len(items)} items in Active Employees")
                 
                 for item in items:
                     name = item.get('name', '').strip()
                     start_date = ""
-                    
-                    print(f"\n  Item: {name}")
                     
                     for col in item['column_values']:
                         col_id = col.get('id', '')
                         col_text = (col.get('text') or '').strip()
                         col_value = col.get('value') or ''
                         
-                        print(f"    Column ID: {col_id}, Text: {col_text}")
-                        
                         if ('adaca' in col_id.lower() or 'start' in col_id.lower()) and 'date' in col_id.lower():
                             start_date = col_text
-                            print(f"    Found start date: {start_date}")
                             if not start_date and col_value:
                                 try:
                                     value_obj = json.loads(col_value)
                                     if 'date' in value_obj:
                                         start_date = value_obj['date']
-                                        print(f"    Parsed start date from value: {start_date}")
                                 except:
                                     pass
                     
                     if start_date and name:
-                        print(f"  Processing: {name} - Start Date: {start_date}")
                         try:
                             for fmt in ['%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y', '%m-%d-%Y', '%m/%d/%y']:
                                 try:
                                     hire_date = datetime.strptime(start_date, fmt)
-                                    print(f"    Parsed as: {hire_date.month}/{hire_date.day}/{hire_date.year}")
                                     if hire_date.month == today_month and hire_date.day == today_day:
                                         years = calculate_years(hire_date, today)
-                                        print(f"    Years: {years}")
                                         if years > 0:
                                             anniversaries_today.append({
                                                 'name': name,
                                                 'years': years
                                             })
-                                            print(f"  ✅ MATCH! Work Anniversary: {name} - {years} years")
                                     break
                                 except ValueError:
                                     continue
-                        except Exception as e:
-                            print(f"  ⚠️ Error checking anniversary for {name}: {e}")
-            else:
-                print(f"  Skipping group: {group_title}")
-    else:
-        print("❌ No data returned from anniversary board query")
+                        except:
+                            pass
     
     # Post birthdays to Slack
     if birthdays_today:
-        print(f"\n🎉 Found {len(birthdays_today)} birthday(s) today!")
+        print(f"🎂 Found {len(birthdays_today)} birthday(s) today!")
         for name in birthdays_today:
             message = random.choice(BIRTHDAY_MESSAGES).format(name=name)
             if post_to_slack(message):
                 print(f"✅ Posted birthday message for {name}")
-            else:
-                print(f"❌ Failed to post birthday message for {name}")
     
     # Post anniversaries to Slack
     if anniversaries_today:
-        print(f"\n🎊 Found {len(anniversaries_today)} work anniversary/anniversaries today!")
+        print(f"🎊 Found {len(anniversaries_today)} work anniversary/anniversaries today!")
         for person in anniversaries_today:
             years_text = format_years(person['years'])
             message = random.choice(ANNIVERSARY_MESSAGES).format(
@@ -273,11 +245,9 @@ def check_celebrations():
             )
             if post_to_slack(message):
                 print(f"✅ Posted anniversary message for {person['name']}")
-            else:
-                print(f"❌ Failed to post anniversary message for {person['name']}")
     
     if not birthdays_today and not anniversaries_today:
-        print("\nℹ️ No celebrations today")
+        print("ℹ️ No celebrations today")
 
 if __name__ == "__main__":
     check_celebrations()
