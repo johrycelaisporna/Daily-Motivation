@@ -1,0 +1,31 @@
+name: Daily Motivational Quote
+
+on:
+  schedule:
+    # Runs at 9:00 AM Manila time (1:00 AM UTC) every day
+    - cron: '0 1 * * *'
+  workflow_dispatch: # Allows manual trigger for testing
+
+jobs:
+  post-quote:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install dependencies
+      run: |
+        pip install anthropic
+    
+    - name: Run quote bot
+      env:
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+      run: |
+        python quote_bot.py
