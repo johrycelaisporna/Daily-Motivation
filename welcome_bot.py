@@ -94,21 +94,27 @@ def get_employees_from_groups():
                     project = ""
                     start_date = ""
                     
+                    print(f"    Processing: {name}")
+                    
                     for col in item['column_values']:
                         col_id = col.get('id', '').lower()
                         col_text = (col.get('text') or '').strip()
                         col_value = col.get('value') or ''
                         
+                        # Debug: print all columns
+                        if col_text:
+                            print(f"      Column {col_id}: {col_text}")
+                        
                         # Get position
-                        if 'position' in col_id:
+                        if 'position' in col_id or 'role' in col_id:
                             position = col_text
                         
                         # Get project/client name
-                        elif 'project' in col_id:
+                        elif 'project' in col_id or 'client' in col_id:
                             project = col_text
                         
                         # Get start date
-                        elif 'adaca' in col_id and 'start' in col_id:
+                        elif ('adaca' in col_id or 'start' in col_id) and 'date' in col_id:
                             start_date = col_text
                             if not start_date and col_value:
                                 try:
@@ -118,7 +124,8 @@ def get_employees_from_groups():
                                 except:
                                     pass
                     
-                    if name and start_date:
+                    if name:
+                        print(f"      -> Name: {name}, Position: {position}, Project: {project}, Start Date: {start_date}")
                         all_employees.append({
                             'name': name,
                             'position': position,
@@ -138,7 +145,8 @@ def find_buddy(new_hire_project, new_hire_start_date, all_employees):
     # Filter employees on same project
     same_project = [emp for emp in all_employees 
                    if emp['project'] == new_hire_project 
-                   and emp['start_date'] != new_hire_start_date]
+                   and emp['start_date'] != new_hire_start_date
+                   and emp['start_date']]
     
     if not same_project:
         return None
@@ -156,6 +164,7 @@ def check_new_hires():
     today = datetime.now(manila_tz)
     today_str = today.strftime('%Y-%m-%d')
     print(f"Today is: {today.strftime('%B %d, %Y')} (Manila time)")
+    print(f"Looking for start date: {today_str}")
     
     # Get all employees
     all_employees = get_employees_from_groups()
