@@ -74,16 +74,20 @@ def get_active_employees():
         groups = result['data']['boards'][0]['groups']
         
         for group in groups:
-            group_title = group.get('title', '')
+            group_title = group.get('title', '').lower()
             
-            if 'active' in group_title.lower() and 'employee' in group_title.lower():
+            # Include both "Active Employees" and "Active - Non billable" groups
+            if ('active' in group_title and 'employee' in group_title) or \
+               ('active' in group_title and 'non' in group_title and 'billable' in group_title):
                 items = group['items_page']['items']
+                group_name = group.get('title', '')
+                print(f"  Including group: {group_name}")
                 for item in items:
                     name = item.get('name', '').strip()
                     if name:
                         employees.append(name)
-                print(f"✅ Found {len(employees)} active employees")
-                break
+        
+        print(f"✅ Found {len(employees)} people total from both groups")
     
     return employees
 
