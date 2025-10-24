@@ -2,9 +2,8 @@ name: Coffee Matcher
 
 on:
   schedule:
-    # Runs every other Thursday at 8:30 AM Manila time (12:30 AM UTC)
-    # Week 1: Oct 31, Week 2: Skip, Week 3: Nov 14, etc.
-    - cron: '30 0 * * 4'
+    # Runs every other Monday at 8:30 AM Manila time (12:30 AM UTC on Monday)
+    - cron: '30 0 * * 1'
   workflow_dispatch: # Allows manual trigger for testing
 
 jobs:
