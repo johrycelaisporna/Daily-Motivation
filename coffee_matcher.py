@@ -149,7 +149,7 @@ def create_coffee_pairings():
     
     # Build message
     message = "☕ *Coffee Dates Alert!* ☕\n\n"
-    message += "It's time to meet at 8:30 AM on Thursday! Here are your random coffee/lunch groups:\n\n"
+    message += "It's time to meet at 8:30 AM on Thursday! Here are your random coffee groups:\n\n"
     
     for i, group in enumerate(groups, 1):
         message += f"*Group {i}:*\n"
@@ -157,7 +157,7 @@ def create_coffee_pairings():
             message += f"  • {person}\n"
         message += "\n"
     
-    message += "_Connect with your group this Thursday at 8:30 AM for coffee or lunch! ☕🍕💬_\n\n"
+    message += "_Connect with your group this Thursday at 8:30 AM for coffee ☕🍕💬_\n\n"
     message += "Next pairings will be posted in two weeks!"
     
     # Post to Slack
