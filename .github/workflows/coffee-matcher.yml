@@ -1,0 +1,41 @@
+name: Coffee Matcher
+
+on:
+  schedule:
+    # Runs every other Thursday at 8:30 AM Manila time (12:30 AM UTC)
+    # Week 1: Oct 31, Week 2: Skip, Week 3: Nov 14, etc.
+    - cron: '30 0 * * 4'
+  workflow_dispatch: # Allows manual trigger for testing
+
+jobs:
+  create-pairings:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Check if should run (bi-weekly)
+      id: check_week
+      run: |
+        # Get week number of the year
+        WEEK=$(date +%V)
+        # Run only on even weeks
+        if [ $((WEEK % 2)) -eq 0 ]; then
+          echo "should_run=true" >> $GITHUB_OUTPUT
+        else
+          echo "should_run=false" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Run coffee matcher
+      if: steps.check_week.outputs.should_run == 'true' || github.event_name == 'workflow_dispatch'
+      env:
+        MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+        SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+      run: |
+        python coffee_matcher.py
