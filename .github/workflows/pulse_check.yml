@@ -1,0 +1,41 @@
+name: Monthly Pulse Check
+
+on:
+  schedule:
+    # First Monday of every month at 8 AM Manila time (midnight UTC)
+    # Note: This runs on the 1st-7th, checks if it's Monday
+    - cron: '0 0 1-7 * *'
+  workflow_dispatch: # Allows manual testing
+
+jobs:
+  send-pulse-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      
+      - name: Check if today is Monday
+        id: check_day
+        run: |
+          DAY=$(TZ='Asia/Manila' date +%u)
+          if [ $DAY -eq 1 ]; then
+            echo "is_monday=true" >> $GITHUB_OUTPUT
+            echo "✅ Today is Monday - sending pulse check"
+          else
+            echo "is_monday=false" >> $GITHUB_OUTPUT
+            echo "⏭️ Not Monday - skipping"
+          fi
+      
+      - name: Send Monthly Pulse Check
+        if: steps.check_day.outputs.is_monday == 'true'
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        run: |
+          python pulse_check.py
