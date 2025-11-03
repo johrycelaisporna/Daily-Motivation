@@ -1,0 +1,26 @@
+name: Daily Check-in
+
+on:
+  schedule:
+    # Runs at 6:00 AM Manila time (10:00 PM UTC previous day) Monday-Friday
+    - cron: '0 22 * * 0-4'  # Sunday-Thursday nights UTC = Monday-Friday mornings Manila
+  workflow_dispatch: # Allows manual testing
+
+jobs:
+  send-checkin:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      
+      - name: Send Daily Check-in
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        run: |
+          python3 daily_checkin.py
