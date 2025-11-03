@@ -2,6 +2,7 @@ import os
 import json
 import urllib.request
 import urllib.parse
+import time
 from datetime import datetime, timezone, timedelta
 
 # Configuration
@@ -32,20 +33,24 @@ def get_user_id_by_name(display_name):
     }
     
     req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req) as response:
-        result = json.loads(response.read().decode('utf-8'))
-        if result.get('ok'):
-            for user in result.get('members', []):
-                real_name = user.get('real_name', '').strip()
-                username = user.get('name', '').strip()
-                profile_name = user.get('profile', {}).get('display_name', '').strip()
-                
-                # Check all possible name formats
-                if (real_name == display_name or 
-                    username == display_name.lower() or 
-                    profile_name == display_name or
-                    display_name.lower() in real_name.lower()):
-                    return user.get('id')
+    try:
+        with urllib.request.urlopen(req) as response:
+            result = json.loads(response.read().decode('utf-8'))
+            if result.get('ok'):
+                for user in result.get('members', []):
+                    real_name = user.get('real_name', '').strip()
+                    username = user.get('name', '').strip()
+                    profile_name = user.get('profile', {}).get('display_name', '').strip()
+                    
+                    # Check all possible name formats
+                    if (real_name == display_name or 
+                        username == display_name.lower() or 
+                        profile_name == display_name or
+                        display_name.lower() in real_name.lower()):
+                        return user.get('id')
+    except urllib.error.HTTPError as e:
+        print(f"  ⚠️ Error fetching user list: {e}")
+        time.sleep(2)  # Wait longer if we hit rate limit
     return None
 
 def send_slack_dm(user_id, message):
@@ -71,8 +76,12 @@ def send_slack_dm(user_id, message):
         with urllib.request.urlopen(req) as response:
             result = json.loads(response.read().decode('utf-8'))
             return result.get("ok")
+    except urllib.error.HTTPError as e:
+        print(f"  ⚠️ Error sending DM: {e}")
+        time.sleep(2)  # Wait longer if we hit rate limit
+        return False
     except Exception as e:
-        print(f"Error sending DM: {e}")
+        print(f"  ⚠️ Error sending DM: {e}")
         return False
 
 def get_active_employees():
@@ -149,12 +158,17 @@ Please reply with a number from 1 to 5:
 
 _Your response is anonymous and helps us improve Adaca._"""
     
-    # Send DM to each employee
+    # Send DM to each employee with rate limiting
     sent_count = 0
     failed = []
     
-    for employee_name in employees:
-        print(f"Sending to: {employee_name}")
+    for i, employee_name in enumerate(employees):
+        print(f"Sending to: {employee_name} ({i+1}/{len(employees)})")
+        
+        # Add delay between requests to avoid rate limiting
+        if i > 0:
+            time.sleep(1.5)  # Wait 1.5 seconds between each person
+        
         user_id = get_user_id_by_name(employee_name)
         
         if user_id:
@@ -176,6 +190,7 @@ _Your response is anonymous and helps us improve Adaca._"""
         print(f"Failed employees: {', '.join(failed)}")
     
     # Notify results recipient
+    time.sleep(2)  # Extra delay before final notification
     results_user_id = get_user_id_by_name(RESULTS_USER)
     if results_user_id:
         notification = f"""📊 *Monthly Pulse Check Sent - {month_name}*
@@ -186,6 +201,8 @@ _I'll send you the compiled results in 7 days. People will reply with their scor
         
         if failed:
             notification += f"\n\n⚠️ Failed to send to {len(failed)} employees:\n{', '.join(failed[:10])}"
+            if len(failed) > 10:
+                notification += f"\n...and {len(failed) - 10} more"
         
         send_slack_dm(results_user_id, notification)
         print(f"✅ Notified {RESULTS_USER}")
