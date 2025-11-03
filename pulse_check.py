@@ -24,8 +24,9 @@ def query_monday(query):
     with urllib.request.urlopen(req) as response:
         return json.loads(response.read().decode('utf-8'))
 
-def get_user_id_by_name(display_name):
-    """Get Slack user ID by display name"""
+def get_all_slack_users():
+    """Get all Slack users once"""
+    print("📋 Fetching all Slack users...")
     url = "https://slack.com/api/users.list"
     headers = {
         "Authorization": f"Bearer {SLACK_BOT_TOKEN}",
@@ -37,20 +38,28 @@ def get_user_id_by_name(display_name):
         with urllib.request.urlopen(req) as response:
             result = json.loads(response.read().decode('utf-8'))
             if result.get('ok'):
-                for user in result.get('members', []):
-                    real_name = user.get('real_name', '').strip()
-                    username = user.get('name', '').strip()
-                    profile_name = user.get('profile', {}).get('display_name', '').strip()
-                    
-                    # Check all possible name formats
-                    if (real_name == display_name or 
-                        username == display_name.lower() or 
-                        profile_name == display_name or
-                        display_name.lower() in real_name.lower()):
-                        return user.get('id')
+                print(f"✅ Fetched {len(result.get('members', []))} Slack users")
+                return result.get('members', [])
     except urllib.error.HTTPError as e:
-        print(f"  ⚠️ Error fetching user list: {e}")
-        time.sleep(2)  # Wait longer if we hit rate limit
+        print(f"❌ Error fetching user list: {e}")
+    return []
+
+def find_user_id(display_name, slack_users):
+    """Find Slack user ID from cached user list"""
+    for user in slack_users:
+        if user.get('deleted') or user.get('is_bot'):
+            continue
+            
+        real_name = user.get('real_name', '').strip()
+        username = user.get('name', '').strip()
+        profile_name = user.get('profile', {}).get('display_name', '').strip()
+        
+        # Check all possible name formats
+        if (real_name == display_name or 
+            username == display_name.lower() or 
+            profile_name == display_name or
+            display_name.lower() in real_name.lower()):
+            return user.get('id')
     return None
 
 def send_slack_dm(user_id, message):
@@ -78,7 +87,6 @@ def send_slack_dm(user_id, message):
             return result.get("ok")
     except urllib.error.HTTPError as e:
         print(f"  ⚠️ Error sending DM: {e}")
-        time.sleep(2)  # Wait longer if we hit rate limit
         return False
     except Exception as e:
         print(f"  ⚠️ Error sending DM: {e}")
@@ -142,6 +150,12 @@ def send_pulse_check():
         print("❌ No employees found")
         return
     
+    # Get all Slack users ONCE
+    slack_users = get_all_slack_users()
+    if not slack_users:
+        print("❌ Could not fetch Slack users")
+        return
+    
     # Create the message
     message = f"""📊 *Monthly Pulse Check - {month_name}*
 
@@ -158,20 +172,17 @@ Please reply with a number from 1 to 5:
 
 _Your response is anonymous and helps us improve Adaca._"""
     
-    # Send DM to each employee with rate limiting
+    # Send DM to each employee
     sent_count = 0
     failed = []
     
     for i, employee_name in enumerate(employees):
         print(f"Sending to: {employee_name} ({i+1}/{len(employees)})")
         
-        # Add delay between requests to avoid rate limiting
-        if i > 0:
-            time.sleep(1.5)  # Wait 1.5 seconds between each person
-        
-        user_id = get_user_id_by_name(employee_name)
+        user_id = find_user_id(employee_name, slack_users)
         
         if user_id:
+            time.sleep(1)  # Rate limit: 1 message per second
             if send_slack_dm(user_id, message):
                 sent_count += 1
                 print(f"  ✅ Sent")
@@ -190,8 +201,8 @@ _Your response is anonymous and helps us improve Adaca._"""
         print(f"Failed employees: {', '.join(failed)}")
     
     # Notify results recipient
-    time.sleep(2)  # Extra delay before final notification
-    results_user_id = get_user_id_by_name(RESULTS_USER)
+    time.sleep(2)
+    results_user_id = find_user_id(RESULTS_USER, slack_users)
     if results_user_id:
         notification = f"""📊 *Monthly Pulse Check Sent - {month_name}*
 
