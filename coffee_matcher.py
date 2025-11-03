@@ -9,7 +9,7 @@ from datetime import datetime, timezone, timedelta
 MONDAY_API_TOKEN = os.environ.get('MONDAY_API_TOKEN')
 SLACK_BOT_TOKEN = os.environ.get('SLACK_BOT_TOKEN')
 ANNIVERSARY_BOARD_ID = "6329303796"
-SLACK_CHANNEL = "coffee-dates"
+SLACK_CHANNEL = "#coffee-dates"
 
 def query_monday(query):
     """Query Monday.com API"""
