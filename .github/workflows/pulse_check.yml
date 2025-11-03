@@ -38,4 +38,4 @@ jobs:
           MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
         run: |
-          python pulse_check.py
+          python3 pulse_check.py
