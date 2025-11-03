@@ -25,7 +25,7 @@ def query_monday(query):
         return json.loads(response.read().decode('utf-8'))
 
 def get_all_slack_users():
-    """Get all Slack users once"""
+    """Get all Slack users once with retry logic"""
     print("📋 Fetching all Slack users...")
     url = "https://slack.com/api/users.list"
     headers = {
@@ -33,15 +33,26 @@ def get_all_slack_users():
         "Content-Type": "application/json"
     }
     
-    req = urllib.request.Request(url, headers=headers)
-    try:
-        with urllib.request.urlopen(req) as response:
-            result = json.loads(response.read().decode('utf-8'))
-            if result.get('ok'):
-                print(f"✅ Fetched {len(result.get('members', []))} Slack users")
-                return result.get('members', [])
-    except urllib.error.HTTPError as e:
-        print(f"❌ Error fetching user list: {e}")
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                if result.get('ok'):
+                    print(f"✅ Fetched {len(result.get('members', []))} Slack users")
+                    return result.get('members', [])
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and attempt < max_retries - 1:
+                wait_time = (attempt + 1) * 10
+                print(f"⏳ Rate limited, waiting {wait_time} seconds... (attempt {attempt + 1}/{max_retries})")
+                time.sleep(wait_time)
+            else:
+                print(f"❌ Error fetching user list: {e}")
+                break
+        except Exception as e:
+            print(f"❌ Error fetching user list: {e}")
+            break
     return []
 
 def find_user_id(display_name, slack_users):
