@@ -92,13 +92,16 @@ def get_daily_message():
     
     print(f"📅 Today is {day_name}, {today.strftime('%B %d, %Y')}")
     
+    # Alternate between quotes and fun facts
+    all_quotes = MONDAY_QUOTES + WEDNESDAY_QUOTES
+    
     if day_name == "Monday":
-        quote = random.choice(MONDAY_QUOTES)
+        quote = random.choice(all_quotes)
         message = f"""🌅 *Good morning, Recruitment Team!*
 
 ✨ _{quote}_
 
-💭 *What's your main goal this week?*
+💭 *What's your main focus today?*
 
 Drop your answer in the thread below! 👇"""
         
@@ -109,38 +112,42 @@ Drop your answer in the thread below! 👇"""
 🎯 *Fun Fact of the Day:*
 {fact}
 
-Have a productive Tuesday! Share your thoughts or your own fun facts in the thread! 👇"""
+💭 *What's your main focus today?*
+
+Share in the thread below! 👇"""
         
     elif day_name == "Wednesday":
-        quote = random.choice(WEDNESDAY_QUOTES)
+        quote = random.choice(all_quotes)
         message = f"""🌅 *Good morning, Recruitment Team!*
 
-💡 *Midweek Reflection:*
-_{quote}_
+💡 _{quote}_
 
-How are you applying this mindset today? Share in the thread! 👇"""
+💭 *What's your main focus today?*
+
+Share in the thread below! 👇"""
         
     elif day_name == "Thursday":
+        fact = random.choice(FUN_FACTS)
         message = f"""🌅 *Good morning, Recruitment Team!*
 
-🏆 *Thursday Check-in:*
+🎯 *Fun Fact of the Day:*
+{fact}
 
-*What's one win so far this week?*
+💭 *What's your main focus today?*
 
-Big or small - we want to hear about it! Share in the thread below! 👇"""
+Share in the thread below! 👇"""
         
     elif day_name == "Friday":
-        fact = random.choice(FUN_FACTS)
+        quote = random.choice(all_quotes)
         message = f"""🌅 *Good morning, Recruitment Team!*
 
 🎉 *It's Friday!*
 
-🎯 *Fun Fact:*
-{fact}
+✨ _{quote}_
 
-🎊 *What are you celebrating this week?*
+💭 *What's your main focus today?*
 
-Share your wins and celebrations in the thread! 👇"""
+Share in the thread below! 👇"""
         
     else:  # Weekend
         message = f"""🌅 *Good morning, Recruitment Team!*
