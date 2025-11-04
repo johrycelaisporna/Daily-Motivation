@@ -48,16 +48,17 @@ def post_to_slack(message):
         return result.get("ok")
 
 def get_active_employees():
-    """Get list of active employees from Monday.com"""
+    """Get list of active employees from Monday.com with pagination"""
     print("☕ Fetching active employees from Monday.com...")
     
+    # Increased limit to 500 to get all items at once
     query = f'''
     {{
       boards(ids: {ANNIVERSARY_BOARD_ID}) {{
         groups {{
           id
           title
-          items_page {{
+          items_page(limit: 500) {{
             items {{
               name
             }}
@@ -77,17 +78,18 @@ def get_active_employees():
             group_title = group.get('title', '').lower()
             
             # Include both "Active Employees" and "Active - Non billable" groups
-            if ('active' in group_title and 'employee' in group_title) or \
+            # Exclude "Not Active" groups
+            if ('active' in group_title and 'employee' in group_title and 'not' not in group_title) or \
                ('active' in group_title and 'non' in group_title and 'billable' in group_title):
                 items = group['items_page']['items']
                 group_name = group.get('title', '')
-                print(f"  Including group: {group_name}")
+                print(f"  Including group: {group_name} ({len(items)} people)")
                 for item in items:
                     name = item.get('name', '').strip()
                     if name:
                         employees.append(name)
         
-        print(f"✅ Found {len(employees)} people total from both groups")
+        print(f"✅ Found {len(employees)} people total from active groups")
     
     return employees
 
