@@ -33,7 +33,7 @@ jobs:
           fi
       
       - name: Send Monthly Pulse Check
-        if: steps.check_day.outputs.is_monday == 'true'
+        if: steps.check_day.outputs.is_monday == 'true' || github.event_name == 'workflow_dispatch'
         env:
           MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
