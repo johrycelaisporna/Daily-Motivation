@@ -1,11 +1,9 @@
 name: Daily Motivational Quote
-
 on:
   schedule:
-    # Runs at 9:00 AM Manila time (1:00 AM UTC) every day
-    - cron: '0 1 * * *'
+    # Runs at 6:00 AM Manila time (10:00 PM UTC previous day)
+    - cron: '0 22 * * *'
   workflow_dispatch: # Allows manual trigger for testing
-
 jobs:
   post-quote:
     runs-on: ubuntu-latest
