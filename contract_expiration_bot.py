@@ -8,7 +8,7 @@ from datetime import datetime, timezone, timedelta
 MONDAY_API_TOKEN = os.environ.get('MONDAY_API_TOKEN')
 SLACK_BOT_TOKEN = os.environ.get('SLACK_BOT_TOKEN')
 BOARD_ID = "6329303796"
-SLACK_CHANNEL = "general"
+SLACK_CHANNEL = "contract-renewals"
 
 def parse_date_to_iso(date_str):
     """Convert various date formats to YYYY-MM-DD"""
@@ -16,11 +16,11 @@ def parse_date_to_iso(date_str):
         return ""
     
     formats = [
+        '%m/%d/%Y',           # 11/05/2025 (primary format)
+        '%m/%d/%y',           # 11/05/25
         '%Y-%m-%d',           # 2025-11-05
         '%b %d, %Y',          # Nov 5, 2025
         '%B %d, %Y',          # November 5, 2025
-        '%m/%d/%Y',           # 11/5/2025
-        '%m/%d/%y',           # 11/5/25
         '%d/%m/%Y',           # 05/11/2025
         '%d/%m/%y',           # 05/11/25
         '%Y/%m/%d',           # 2025/11/05
@@ -104,13 +104,10 @@ def get_employees_with_contracts():
         groups = result['data']['boards'][0]['groups']
         
         for group in groups:
-            group_title = group.get('title', '').lower()
-            
-            # Only check active employees
-            if 'active' not in group_title:
-                continue
-            
+            group_title = group.get('title', '')
             items = group['items_page']['items']
+            
+            print(f"  Checking group: {group_title} ({len(items)} items)")
             
             for item in items:
                 name = item.get('name', '').strip()
@@ -120,39 +117,45 @@ def get_employees_with_contracts():
                 contract_status = ""
                 
                 for col in item['column_values']:
-                    col_id = col.get('id', '').lower()
+                    col_id = col.get('id', '')
                     col_text = (col.get('text') or '').strip()
                     col_value = col.get('value') or ''
                     
                     # Get position
-                    if 'position' in col_id or 'role' in col_id:
+                    if col_id == 'position':
                         position = col_text
                     
                     # Get project
-                    elif 'project' in col_id or 'client' in col_id:
+                    elif col_id == 'project':
                         project = col_text
                     
                     # Get contract end date - "Contract End Date" column (formula column)
                     elif col_id == 'formula_mkm2ndwz':
                         contract_end_date = col_text
+                        print(f"    {name}: Contract End Date text = '{col_text}'")
+                        
                         if not contract_end_date and col_value:
                             try:
                                 value_obj = json.loads(col_value)
+                                print(f"    {name}: Contract End Date value = {value_obj}")
                                 if isinstance(value_obj, str):
                                     contract_end_date = value_obj
-                                elif 'date' in value_obj:
+                                elif isinstance(value_obj, dict) and 'date' in value_obj:
                                     contract_end_date = value_obj['date']
-                            except:
-                                pass
+                            except Exception as e:
+                                print(f"    {name}: Error parsing contract date - {e}")
                         
                         if contract_end_date:
+                            original_date = contract_end_date
                             contract_end_date = parse_date_to_iso(contract_end_date)
+                            print(f"    {name}: Parsed '{original_date}' -> '{contract_end_date}'")
                     
                     # Get contract status
-                    elif 'status_mkn52y8w' in col_id or 'contract' in col_id and 'status' in col_id:
+                    elif col_id == 'status_mkn52y8w':
                         contract_status = col_text
                 
                 if name and contract_end_date:
+                    print(f"    ✓ Adding {name} with contract end date: {contract_end_date}")
                     employees.append({
                         'name': name,
                         'position': position,
@@ -160,6 +163,8 @@ def get_employees_with_contracts():
                         'contract_end_date': contract_end_date,
                         'contract_status': contract_status
                     })
+                elif name:
+                    print(f"    ✗ Skipping {name} (no contract end date)")
     
     print(f"✅ Found {len(employees)} employees with contract dates")
     return employees
