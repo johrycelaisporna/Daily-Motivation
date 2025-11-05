@@ -10,6 +10,32 @@ SLACK_BOT_TOKEN = os.environ.get('SLACK_BOT_TOKEN')
 BOARD_ID = "6329303796"
 SLACK_CHANNEL = "general"
 
+def parse_date_to_iso(date_str):
+    """Convert various date formats to YYYY-MM-DD"""
+    if not date_str:
+        return ""
+    
+    # Try different date formats
+    formats = [
+        '%Y-%m-%d',           # 2025-11-05
+        '%b %d, %Y',          # Nov 5, 2025
+        '%B %d, %Y',          # November 5, 2025
+        '%m/%d/%Y',           # 11/5/2025
+        '%d/%m/%Y',           # 05/11/2025
+        '%Y/%m/%d',           # 2025/11/05
+        '%b %d',              # Nov 5 (assumes current year)
+    ]
+    
+    for fmt in formats:
+        try:
+            parsed_date = datetime.strptime(date_str.strip(), fmt)
+            return parsed_date.strftime('%Y-%m-%d')
+        except ValueError:
+            continue
+    
+    print(f"      ⚠️ Could not parse date: {date_str}")
+    return ""  # Return empty if no format matches
+
 def query_monday(query):
     """Query Monday.com API"""
     url = "https://api.monday.com/v2"
@@ -56,7 +82,8 @@ def get_employees_from_groups():
         groups {{
           id
           title
-          items_page {{
+          items_page(limit: 500) {{
+            cursor
             items {{
               name
               column_values {{
@@ -123,6 +150,10 @@ def get_employees_from_groups():
                                         start_date = value_obj['date']
                                 except:
                                     pass
+                            
+                            # Convert date to ISO format (YYYY-MM-DD)
+                            if start_date:
+                                start_date = parse_date_to_iso(start_date)
                     
                     if name:
                         print(f"      -> Name: {name}, Position: {position}, Project: {project}, Start Date: {start_date}")
