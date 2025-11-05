@@ -72,8 +72,49 @@ def post_to_slack(message, channel=SLACK_CHANNEL):
         result = json.loads(response.read().decode('utf-8'))
         return result.get("ok")
 
+def calculate_contract_end_date(start_date_str, duration_months):
+    """Calculate contract end date from start date + duration in months"""
+    if not start_date_str or not duration_months:
+        return ""
+    
+    try:
+        # Parse start date
+        start_date = None
+        for fmt in ['%Y-%m-%d', '%b %d, %Y', '%B %d, %Y', '%m/%d/%Y', '%m/%d/%y']:
+            try:
+                start_date = datetime.strptime(start_date_str.strip(), fmt)
+                break
+            except ValueError:
+                continue
+        
+        if not start_date:
+            return ""
+        
+        # Add duration in months
+        month = start_date.month + int(duration_months)
+        year = start_date.year
+        
+        # Handle month overflow
+        while month > 12:
+            month -= 12
+            year += 1
+        
+        # Create end date (same day of month, or last day if not valid)
+        day = start_date.day
+        while day > 0:
+            try:
+                end_date = datetime(year, month, day)
+                return end_date.strftime('%Y-%m-%d')
+            except ValueError:
+                day -= 1  # Try previous day if invalid (e.g., Feb 31)
+        
+        return ""
+    except Exception as e:
+        print(f"Error calculating contract end date: {e}")
+        return ""
+
 def get_employees_with_contracts():
-    """Get all active employees with contract end dates"""
+    """Get all employees and calculate contract end dates"""
     print("📋 Fetching employees from Monday.com...")
     
     query = f'''
@@ -87,6 +128,7 @@ def get_employees_with_contracts():
               name
               column_values {{
                 id
+                title
                 text
                 value
               }}
@@ -113,11 +155,13 @@ def get_employees_with_contracts():
                 name = item.get('name', '').strip()
                 position = ""
                 project = ""
-                contract_end_date = ""
+                start_date = ""
+                duration_months = ""
                 contract_status = ""
                 
                 for col in item['column_values']:
                     col_id = col.get('id', '')
+                    col_title = col.get('title', '')
                     col_text = (col.get('text') or '').strip()
                     col_value = col.get('value') or ''
                     
@@ -129,58 +173,42 @@ def get_employees_with_contracts():
                     elif col_id == 'project':
                         project = col_text
                     
-                    # Get contract end date - "Contract End Date" column (formula column)
-                    elif col_id == 'formula_mkm2ndwz':
-                        print(f"    {name}: Contract End Date text = '{col_text}'")
-                        print(f"    {name}: Contract End Date value = '{col_value}'")
-                        
-                        # Try text first
+                    # Get start date (Adaca Start Date or Contract Start Date)
+                    elif col_id in ['start_date___', 'date_mkkgvb4z']:
                         if col_text:
-                            contract_end_date = col_text
-                        # Then try parsing the value field
-                        elif col_value:
-                            try:
-                                value_obj = json.loads(col_value)
-                                print(f"    {name}: Contract End Date parsed value = {value_obj}")
-                                
-                                # Formula columns might return just a string
-                                if isinstance(value_obj, str):
-                                    contract_end_date = value_obj
-                                # Or might have a text field
-                                elif isinstance(value_obj, dict):
-                                    if 'text' in value_obj:
-                                        contract_end_date = value_obj['text']
-                                    elif 'date' in value_obj:
-                                        contract_end_date = value_obj['date']
-                            except Exception as e:
-                                print(f"    {name}: Error parsing contract date - {e}")
-                        
-                        if contract_end_date:
-                            original_date = contract_end_date
-                            contract_end_date = parse_date_to_iso(contract_end_date)
-                            print(f"    {name}: Parsed '{original_date}' -> '{contract_end_date}'")
+                            start_date = col_text
+                    
+                    # Get contract duration (in months)
+                    elif col_id == 'numbers_mkm2917g':
+                        duration_months = col_text
                     
                     # Get contract status
                     elif col_id == 'status_mkn52y8w':
                         contract_status = col_text
                 
-                if name and contract_end_date:
-                    print(f"    ✓ Adding {name} with contract end date: {contract_end_date}")
-                    employees.append({
-                        'name': name,
-                        'position': position,
-                        'project': project,
-                        'contract_end_date': contract_end_date,
-                        'contract_status': contract_status
-                    })
+                # Calculate contract end date from start date + duration
+                if name and start_date and duration_months:
+                    contract_end_date = calculate_contract_end_date(start_date, duration_months)
+                    
+                    if contract_end_date:
+                        print(f"    ✓ {name}: {start_date} + {duration_months} months = {contract_end_date}")
+                        employees.append({
+                            'name': name,
+                            'position': position,
+                            'project': project,
+                            'contract_end_date': contract_end_date,
+                            'contract_status': contract_status
+                        })
+                    else:
+                        print(f"    ✗ {name}: Could not calculate end date")
                 elif name:
-                    print(f"    ✗ Skipping {name} (no contract end date)")
+                    print(f"    ✗ {name}: Missing start_date={start_date}, duration={duration_months}")
     
     print(f"✅ Found {len(employees)} employees with contract dates")
     return employees
 
 def check_contract_expirations():
-    """Check for contracts expiring in 30, 60, or 90 days"""
+    """Check for contracts expiring in 30, 60, 90 days, or already expired"""
     print("⏰ Checking contract expirations...")
     
     # Get today's date in Manila timezone
@@ -200,7 +228,7 @@ def check_contract_expirations():
     # Get all employees
     employees = get_employees_with_contracts()
     
-    # Categorize by expiration timeframe
+    # Categorize by expiration timeframe (including past dates)
     expiring_30 = []
     expiring_60 = []
     expiring_90 = []
@@ -214,6 +242,7 @@ def check_contract_expirations():
             
             emp['days_until'] = days_until
             
+            # Include all expired contracts (any date before today)
             if days_until < 0:
                 expired.append(emp)
             elif days_until <= 30:
@@ -283,6 +312,7 @@ def check_contract_expirations():
         message += f"🔴 Red (30 days): {len(expiring_30)}\n"
         message += f"🟠 Orange (60 days): {len(expiring_60)}\n"
         message += f"🟡 Yellow (90 days): {len(expiring_90)}\n"
+        message += f"📋 Total contracts to review: {len(all_alerts)}\n"
         message += "━━━━━━━━━━━━━━━━━━━━━\n"
         message += "💼 Please review and take necessary action for contract renewals."
         
