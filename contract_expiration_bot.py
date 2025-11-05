@@ -16,15 +16,15 @@ def parse_date_to_iso(date_str):
         return ""
     
     formats = [
-        '%m/%d/%Y',           # 11/05/2025 (primary format)
-        '%m/%d/%y',           # 11/05/25
-        '%Y-%m-%d',           # 2025-11-05
-        '%b %d, %Y',          # Nov 5, 2025
-        '%B %d, %Y',          # November 5, 2025
-        '%d/%m/%Y',           # 05/11/2025
-        '%d/%m/%y',           # 05/11/25
-        '%Y/%m/%d',           # 2025/11/05
-        '%y/%m/%d',           # 25/11/05
+        '%b %d, %Y',          # Oct 19, 2026
+        '%B %d, %Y',          # October 19, 2026
+        '%m/%d/%Y',           # 10/19/2026
+        '%m/%d/%y',           # 10/19/26
+        '%Y-%m-%d',           # 2026-10-19
+        '%d/%m/%Y',           # 19/10/2026
+        '%d/%m/%y',           # 19/10/26
+        '%Y/%m/%d',           # 2026/10/19
+        '%y/%m/%d',           # 26/10/19
     ]
     
     for fmt in formats:
@@ -131,17 +131,27 @@ def get_employees_with_contracts():
                     
                     # Get contract end date - "Contract End Date" column (formula column)
                     elif col_id == 'formula_mkm2ndwz':
-                        contract_end_date = col_text
                         print(f"    {name}: Contract End Date text = '{col_text}'")
+                        print(f"    {name}: Contract End Date value = '{col_value}'")
                         
-                        if not contract_end_date and col_value:
+                        # Try text first
+                        if col_text:
+                            contract_end_date = col_text
+                        # Then try parsing the value field
+                        elif col_value:
                             try:
                                 value_obj = json.loads(col_value)
-                                print(f"    {name}: Contract End Date value = {value_obj}")
+                                print(f"    {name}: Contract End Date parsed value = {value_obj}")
+                                
+                                # Formula columns might return just a string
                                 if isinstance(value_obj, str):
                                     contract_end_date = value_obj
-                                elif isinstance(value_obj, dict) and 'date' in value_obj:
-                                    contract_end_date = value_obj['date']
+                                # Or might have a text field
+                                elif isinstance(value_obj, dict):
+                                    if 'text' in value_obj:
+                                        contract_end_date = value_obj['text']
+                                    elif 'date' in value_obj:
+                                        contract_end_date = value_obj['date']
                             except Exception as e:
                                 print(f"    {name}: Error parsing contract date - {e}")
                         
@@ -216,37 +226,56 @@ def check_contract_expirations():
         except ValueError:
             continue
     
-    # Build and post alert message with traffic light colors
+    # Build and post alert message with traffic light colors - GROUPED BY PROJECT
     if expired or expiring_30 or expiring_60 or expiring_90:
         message = "🚦 *CONTRACT EXPIRATION ALERTS* 🚦\n\n"
         
-        if expired:
-            message += "⚫ *EXPIRED CONTRACTS* ⚫\n"
-            for emp in sorted(expired, key=lambda x: x['days_until']):
-                message += f"⚫ *{emp['name']}* - {emp['position']} ({emp['project']})\n"
-                message += f"   Expired {abs(emp['days_until'])} days ago on {emp['contract_end_date']}\n"
-                message += f"   Status: {emp['contract_status']}\n\n"
+        # Combine all lists with their traffic light status
+        all_alerts = []
+        for emp in expired:
+            emp['alert_type'] = 'expired'
+            emp['emoji'] = '⚫'
+            emp['label'] = 'EXPIRED - NEEDS RENEWAL'
+            all_alerts.append(emp)
+        for emp in expiring_30:
+            emp['alert_type'] = 'red'
+            emp['emoji'] = '🔴'
+            emp['label'] = 'RED ALERT - 30 DAYS'
+            all_alerts.append(emp)
+        for emp in expiring_60:
+            emp['alert_type'] = 'orange'
+            emp['emoji'] = '🟠'
+            emp['label'] = 'ORANGE ALERT - 60 DAYS'
+            all_alerts.append(emp)
+        for emp in expiring_90:
+            emp['alert_type'] = 'yellow'
+            emp['emoji'] = '🟡'
+            emp['label'] = 'YELLOW ALERT - 90 DAYS'
+            all_alerts.append(emp)
         
-        if expiring_30:
-            message += "🔴 *RED ALERT - EXPIRING WITHIN 30 DAYS* 🔴\n"
-            for emp in sorted(expiring_30, key=lambda x: x['days_until']):
-                message += f"🔴 *{emp['name']}* - {emp['position']} ({emp['project']})\n"
-                message += f"   {emp['days_until']} days left - Expires: {emp['contract_end_date']}\n"
-                message += f"   Status: {emp['contract_status']}\n\n"
+        # Group by project
+        projects = {}
+        for emp in all_alerts:
+            project = emp['project'] or 'No Project'
+            if project not in projects:
+                projects[project] = []
+            projects[project].append(emp)
         
-        if expiring_60:
-            message += "🟠 *ORANGE ALERT - EXPIRING WITHIN 60 DAYS* 🟠\n"
-            for emp in sorted(expiring_60, key=lambda x: x['days_until']):
-                message += f"🟠 *{emp['name']}* - {emp['position']} ({emp['project']})\n"
-                message += f"   {emp['days_until']} days left - Expires: {emp['contract_end_date']}\n"
+        # Sort projects alphabetically
+        for project in sorted(projects.keys()):
+            message += f"📁 *{project}*\n"
+            
+            # Sort employees within project by days_until (most urgent first)
+            for emp in sorted(projects[project], key=lambda x: x['days_until']):
+                message += f"{emp['emoji']} {emp['name']} - {emp['position']}\n"
+                message += f"   Contract End Date: {emp['contract_end_date']} ({emp['label']})\n"
+                if emp['days_until'] >= 0:
+                    message += f"   Days remaining: {emp['days_until']}\n"
+                else:
+                    message += f"   Expired {abs(emp['days_until'])} days ago\n"
                 message += f"   Status: {emp['contract_status']}\n\n"
-        
-        if expiring_90:
-            message += "🟡 *YELLOW ALERT - EXPIRING WITHIN 90 DAYS* 🟡\n"
-            for emp in sorted(expiring_90, key=lambda x: x['days_until']):
-                message += f"🟡 *{emp['name']}* - {emp['position']} ({emp['project']})\n"
-                message += f"   {emp['days_until']} days left - Expires: {emp['contract_end_date']}\n"
-                message += f"   Status: {emp['contract_status']}\n\n"
+            
+            message += "\n"
         
         message += "━━━━━━━━━━━━━━━━━━━━━\n"
         message += f"📊 *Summary*\n"
