@@ -128,7 +128,6 @@ def get_employees_with_contracts():
               name
               column_values {{
                 id
-                title
                 text
                 value
               }}
