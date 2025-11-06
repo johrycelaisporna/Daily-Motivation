@@ -143,6 +143,14 @@ def get_employees_with_contracts():
     employees = []
     
     print(f"API Response keys: {result.keys()}")
+    
+    if 'errors' in result:
+        print(f"❌ API ERRORS:")
+        for error in result['errors']:
+            print(f"   - {error}")
+        print(f"\nFull error response: {json.dumps(result, indent=2)}")
+        return []
+    
     print(f"Has 'data'? {result.get('data') is not None}")
     
     if result.get('data'):
