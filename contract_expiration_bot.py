@@ -159,11 +159,18 @@ def get_employees_with_contracts():
                 duration_months = ""
                 contract_status = ""
                 
+                if name:
+                    print(f"\n    Processing: {name}")
+                
                 for col in item['column_values']:
                     col_id = col.get('id', '')
                     col_title = col.get('title', '')
                     col_text = (col.get('text') or '').strip()
                     col_value = col.get('value') or ''
+                    
+                    # Debug: Print all columns for first employee
+                    if name and col_text:
+                        print(f"      [{col_id}] {col_title}: {col_text}")
                     
                     # Get position
                     if col_id == 'position':
@@ -177,10 +184,12 @@ def get_employees_with_contracts():
                     elif col_id in ['start_date___', 'date_mkkgvb4z']:
                         if col_text:
                             start_date = col_text
+                            print(f"      >>> Found start date: {start_date}")
                     
                     # Get contract duration (in months)
                     elif col_id == 'numbers_mkm2917g':
                         duration_months = col_text
+                        print(f"      >>> Found duration: {duration_months} months")
                     
                     # Get contract status
                     elif col_id == 'status_mkn52y8w':
