@@ -167,6 +167,12 @@ def get_employees_with_contracts():
         
         for group in groups:
             group_title = group.get('title', '')
+            
+            # Only process "Active Employees" group (not Non Billable)
+            if group_title != 'Active Employees':
+                print(f"  Skipping group: {group_title}")
+                continue
+            
             items = group['items_page']['items']
             
             print(f"  Checking group: {group_title} ({len(items)} items)")
@@ -184,13 +190,12 @@ def get_employees_with_contracts():
                 
                 for col in item['column_values']:
                     col_id = col.get('id', '')
-                    col_title = col.get('title', '')
                     col_text = (col.get('text') or '').strip()
                     col_value = col.get('value') or ''
                     
                     # Debug: Print all columns for first employee
                     if name and col_text:
-                        print(f"      [{col_id}] {col_title}: {col_text}")
+                        print(f"      [{col_id}]: {col_text}")
                     
                     # Get position
                     if col_id == 'position':
