@@ -142,6 +142,19 @@ def get_employees_with_contracts():
     result = query_monday(query)
     employees = []
     
+    print(f"API Response keys: {result.keys()}")
+    print(f"Has 'data'? {result.get('data') is not None}")
+    
+    if result.get('data'):
+        print(f"Data keys: {result['data'].keys()}")
+        print(f"Has 'boards'? {result['data'].get('boards') is not None}")
+        
+        if result['data'].get('boards'):
+            print(f"Number of boards: {len(result['data']['boards'])}")
+            if len(result['data']['boards']) > 0:
+                print(f"Board keys: {result['data']['boards'][0].keys()}")
+                print(f"Number of groups: {len(result['data']['boards'][0].get('groups', []))}")
+    
     if result.get('data') and result['data'].get('boards'):
         groups = result['data']['boards'][0]['groups']
         
