@@ -109,12 +109,15 @@ def get_new_jobs():
     if result.get('data') and result['data'].get('boards'):
         groups = result['data']['boards'][0]['groups']
         
-        # Get today and 7 days ago in Manila timezone
+        # Get today and time ranges in Manila timezone
         manila_tz = timezone(timedelta(hours=8))
         today = datetime.now(manila_tz)
         seven_days_ago = today - timedelta(days=7)
+        three_months_ago = today - timedelta(days=90)
         
-        print(f"Looking for jobs added between {seven_days_ago.strftime('%Y-%m-%d')} and {today.strftime('%Y-%m-%d')}")
+        print(f"Looking for:")
+        print(f"  - New jobs added in last 7 days (since {seven_days_ago.strftime('%Y-%m-%d')})")
+        print(f"  - Open jobs older than 3 months (before {three_months_ago.strftime('%Y-%m-%d')})")
         
         for group in groups:
             group_title = group.get('title', '')
@@ -140,9 +143,8 @@ def get_new_jobs():
                     print(f"    ✗ {job_title}: Could not parse created date")
                     continue
                 
-                # Check if job was created in the last 7 days
-                if created_at < seven_days_ago:
-                    continue
+                # Calculate age of job
+                job_age_days = (today - created_at).days
                 
                 recruiter = ""
                 status = ""
@@ -150,6 +152,7 @@ def get_new_jobs():
                 client = ""
                 location = ""
                 skills = ""
+                top_5_skills = ""
                 salary = ""
                 
                 for col in item['column_values']:
@@ -167,6 +170,8 @@ def get_new_jobs():
                         client = col_text
                     elif 'location' in col_id.lower():
                         location = col_text
+                    elif 'top' in col_id.lower() and '5' in col_id.lower():
+                        top_5_skills = col_text
                     elif 'skill' in col_id.lower() or 'tech' in col_id.lower():
                         skills = col_text
                     elif 'salary' in col_id.lower():
@@ -183,7 +188,19 @@ def get_new_jobs():
                     print(f"    ✗ {job_title}: Role status is '{role_status}', skipping")
                     continue
                 
-                print(f"    ✓ NEW JOB: {job_title} (created {created_at.strftime('%Y-%m-%d')})")
+                # Check if job qualifies:
+                # Option A: Created in last 7 days
+                # OR
+                # Option C: Open for more than 3 months (90 days) with qualifying status
+                is_new = created_at >= seven_days_ago
+                is_old_open = job_age_days > 90
+                
+                if not (is_new or is_old_open):
+                    print(f"    ✗ {job_title}: {job_age_days} days old (not new and not >90 days)")
+                    continue
+                
+                job_type = "🆕 NEW" if is_new else "⏰ STILL OPEN (90+ days)"
+                print(f"    ✓ {job_type}: {job_title} ({job_age_days} days old)")
                 
                 new_jobs.append({
                     'id': job_id,
@@ -194,11 +211,14 @@ def get_new_jobs():
                     'client': client,
                     'location': location,
                     'skills': skills,
+                    'top_5_skills': top_5_skills,
                     'salary': salary,
-                    'created_at': created_at.strftime('%B %d, %Y')
+                    'created_at': created_at.strftime('%B %d, %Y'),
+                    'job_age_days': job_age_days,
+                    'is_new': is_new
                 })
     
-    print(f"✅ Found {len(new_jobs)} new job(s)")
+    print(f"✅ Found {len(new_jobs)} job(s)")
     return new_jobs
 
 def post_job_alerts():
@@ -230,7 +250,9 @@ def post_job_alerts():
         if job['salary']:
             message += f"💰 Salary: {job['salary']}\n"
         
-        if job['skills']:
+        if job['top_5_skills']:
+            message += f"⭐ Top 5 Skills: {job['top_5_skills']}\n"
+        elif job['skills']:
             message += f"🎓 Skills: {job['skills']}\n"
         
         if job['recruiter']:
