@@ -84,7 +84,6 @@ def get_new_jobs():
             items {{
               id
               name
-              created_at
               column_values {{
                 id
                 text
@@ -147,22 +146,20 @@ def get_new_jobs():
                     col_id = col.get('id', '')
                     col_text = (col.get('text') or '').strip()
                     
-                    # Map column IDs
-                    if 'recruiter' in col_id.lower() or 'person' in col_id.lower():
+                    # Map column IDs based on debug output
+                    if col_id == 'people':  # Recruiter
                         recruiter = col_text
-                    elif col_id.lower() == 'status':
-                        status = col_text
-                    elif 'role' in col_id.lower() and 'status' in col_id.lower():
+                    elif col_id == 'status7':  # Role Status
                         role_status = col_text
-                    elif 'client' in col_id.lower() or 'company' in col_id.lower():
+                    elif col_id == 'status_mkn7hmst':  # Hiring Status
+                        status = col_text
+                    elif col_id == 'dropdown':  # Client
                         client = col_text
-                    elif 'location' in col_id.lower():
+                    elif col_id == 'color_mknjx0n':  # Role Type
                         location = col_text
-                    elif 'top' in col_id.lower() and '5' in col_id.lower():
+                    elif col_id == 'dropdown_mkxfm4d1':  # Top 5 skills needed
                         top_5_skills = col_text
-                    elif 'skill' in col_id.lower() or 'tech' in col_id.lower():
-                        skills = col_text
-                    elif 'job' in col_id.lower() and 'list' in col_id.lower():
+                    elif col_id == 'date_1_mkn7ny21':  # Job Listed
                         job_listed_date = col_text
                 
                 # Check Role Status first
@@ -197,10 +194,10 @@ def get_new_jobs():
                 job_age_days = (today - listed_date).days
                 
                 # Check if job qualifies:
-                # Option A: Created in last 7 days
+                # Option A: Listed in last 7 days
                 # OR
                 # Option C: Open for more than 3 months (90 days) with qualifying status
-                is_new = created_at >= seven_days_ago
+                is_new = listed_date >= seven_days_ago
                 is_old_open = job_age_days > 90
                 
                 if not (is_new or is_old_open):
@@ -220,7 +217,7 @@ def get_new_jobs():
                     'location': location,
                     'skills': skills,
                     'top_5_skills': top_5_skills,
-                    'created_at': created_at.strftime('%B %d, %Y'),
+                    'created_at': listed_date.strftime('%B %d, %Y'),
                     'job_age_days': job_age_days,
                     'is_new': is_new
                 })
