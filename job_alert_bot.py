@@ -167,9 +167,11 @@ def get_new_jobs():
                     print(f"    ✗ {job_title}: No role status found")
                     continue
                 
-                role_status_lower = role_status.lower()
+                # Normalize the role status - replace both dash types and normalize spacing
+                role_status_normalized = role_status.replace('–', '-').replace('  ', ' ').lower().strip()
                 allowed_statuses = ['need more profiles', 'in progress', 'sales - new lead']
-                if role_status_lower not in allowed_statuses:
+                
+                if role_status_normalized not in allowed_statuses:
                     print(f"    ✗ {job_title}: Role status is '{role_status}', skipping")
                     continue
                 
