@@ -122,8 +122,8 @@ def get_new_jobs():
         for group in groups:
             group_title = group.get('title', '')
             
-            # Only process "Active recruitment" group
-            if group_title != 'Active recruitment':
+            # Only process "Active Recruitment" group (case-insensitive)
+            if group_title.lower() != 'active recruitment':
                 print(f"  Skipping group: {group_title}")
                 continue
             
@@ -133,18 +133,6 @@ def get_new_jobs():
             for item in items:
                 job_title = item.get('name', '').strip()
                 job_id = item.get('id', '')
-                created_at_str = item.get('created_at', '')
-                
-                # Parse created date
-                try:
-                    created_at = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
-                    created_at = created_at.astimezone(manila_tz)
-                except:
-                    print(f"    ✗ {job_title}: Could not parse created date")
-                    continue
-                
-                # Calculate age of job
-                job_age_days = (today - created_at).days
                 
                 recruiter = ""
                 status = ""
@@ -153,12 +141,13 @@ def get_new_jobs():
                 location = ""
                 skills = ""
                 top_5_skills = ""
+                job_listed_date = ""
                 
                 for col in item['column_values']:
                     col_id = col.get('id', '')
                     col_text = (col.get('text') or '').strip()
                     
-                    # Map column IDs (you may need to adjust these)
+                    # Map column IDs
                     if 'recruiter' in col_id.lower() or 'person' in col_id.lower():
                         recruiter = col_text
                     elif col_id.lower() == 'status':
@@ -173,8 +162,10 @@ def get_new_jobs():
                         top_5_skills = col_text
                     elif 'skill' in col_id.lower() or 'tech' in col_id.lower():
                         skills = col_text
+                    elif 'job' in col_id.lower() and 'list' in col_id.lower():
+                        job_listed_date = col_text
                 
-                # Check Role Status - must be "need more profiles", "In progress", or "sales - New Lead"
+                # Check Role Status first
                 if not role_status:
                     print(f"    ✗ {job_title}: No role status found")
                     continue
@@ -184,6 +175,26 @@ def get_new_jobs():
                 if role_status_lower not in allowed_statuses:
                     print(f"    ✗ {job_title}: Role status is '{role_status}', skipping")
                     continue
+                
+                # Parse Job Listed date
+                if not job_listed_date:
+                    print(f"    ✗ {job_title}: No 'Job Listed' date found")
+                    continue
+                
+                job_listed_iso = parse_date_to_iso(job_listed_date)
+                if not job_listed_iso:
+                    print(f"    ✗ {job_title}: Could not parse 'Job Listed' date: {job_listed_date}")
+                    continue
+                
+                try:
+                    listed_date = datetime.strptime(job_listed_iso, '%Y-%m-%d')
+                    listed_date = listed_date.replace(tzinfo=manila_tz)
+                except:
+                    print(f"    ✗ {job_title}: Could not convert date")
+                    continue
+                
+                # Calculate age of job
+                job_age_days = (today - listed_date).days
                 
                 # Check if job qualifies:
                 # Option A: Created in last 7 days
@@ -209,7 +220,6 @@ def get_new_jobs():
                     'location': location,
                     'skills': skills,
                     'top_5_skills': top_5_skills,
-                    'salary': salary,
                     'created_at': created_at.strftime('%B %d, %Y'),
                     'job_age_days': job_age_days,
                     'is_new': is_new
@@ -248,9 +258,6 @@ def post_job_alerts():
             if job['location']:
                 message += f"📍 Location: {job['location']}\n"
             
-            if job['salary']:
-                message += f"💰 Salary: {job['salary']}\n"
-            
             if job['top_5_skills']:
                 message += f"⭐ Top 5 Skills: {job['top_5_skills']}\n"
             elif job['skills']:
@@ -278,9 +285,6 @@ def post_job_alerts():
             
             if job['location']:
                 message += f"📍 Location: {job['location']}\n"
-            
-            if job['salary']:
-                message += f"💰 Salary: {job['salary']}\n"
             
             if job['top_5_skills']:
                 message += f"⭐ Top 5 Skills: {job['top_5_skills']}\n"
