@@ -153,7 +153,6 @@ def get_new_jobs():
                 location = ""
                 skills = ""
                 top_5_skills = ""
-                salary = ""
                 
                 for col in item['column_values']:
                     col_id = col.get('id', '')
@@ -174,8 +173,6 @@ def get_new_jobs():
                         top_5_skills = col_text
                     elif 'skill' in col_id.lower() or 'tech' in col_id.lower():
                         skills = col_text
-                    elif 'salary' in col_id.lower():
-                        salary = col_text
                 
                 # Check Role Status - must be "need more profiles", "In progress", or "sales - New Lead"
                 if not role_status:
@@ -223,58 +220,93 @@ def get_new_jobs():
 
 def post_job_alerts():
     """Post new job alerts to Slack"""
-    print("🎯 Checking for new job postings...")
+    print("🎯 Checking for job postings...")
     
-    new_jobs = get_new_jobs()
+    jobs = get_new_jobs()
     
-    if not new_jobs:
-        print("ℹ️ No new jobs to post")
+    if not jobs:
+        print("ℹ️ No jobs to post")
         return
     
-    # Post header message
-    header = f"🎯 *NEW JOB OPENINGS THIS WEEK* 🎯\n\n"
-    header += f"We have {len(new_jobs)} new position(s) to fill!\n\n"
+    # Separate new vs old open jobs
+    new_jobs = [j for j in jobs if j['is_new']]
+    old_open_jobs = [j for j in jobs if not j['is_new']]
     
-    for job in new_jobs:
-        message = header if new_jobs.index(job) == 0 else ""
+    # Build message
+    message = f"🎯 *WEEKLY JOB ALERTS* 🎯\n\n"
+    
+    if new_jobs:
+        message += f"🆕 *NEW JOBS THIS WEEK* ({len(new_jobs)})\n\n"
         
-        message += f"━━━━━━━━━━━━━━━━━━━━━\n"
-        message += f"💼 *{job['title']}*\n\n"
+        for job in new_jobs:
+            message += f"━━━━━━━━━━━━━━━━━━━━━\n"
+            message += f"💼 *{job['title']}*\n"
+            
+            if job['client']:
+                message += f"🏢 Client: *{job['client']}*\n"
+            
+            if job['location']:
+                message += f"📍 Location: {job['location']}\n"
+            
+            if job['salary']:
+                message += f"💰 Salary: {job['salary']}\n"
+            
+            if job['top_5_skills']:
+                message += f"⭐ Top 5 Skills: {job['top_5_skills']}\n"
+            elif job['skills']:
+                message += f"🎓 Skills: {job['skills']}\n"
+            
+            if job['recruiter']:
+                message += f"👤 Recruiter: {job['recruiter']}\n"
+            
+            message += f"📅 Posted: {job['created_at']}\n"
+            message += f"📊 Role Status: {job['role_status']}\n"
+            message += f"🔗 View: https://adacahq.monday.com/boards/{BOARD_ID}/pulses/{job['id']}\n\n"
+    
+    if old_open_jobs:
+        message += f"\n⏰ *STILL OPEN - NEED URGENT ATTENTION* ({len(old_open_jobs)})\n"
+        message += f"_These positions have been open for 90+ days_\n\n"
         
-        if job['client']:
-            message += f"🏢 Client: {job['client']}\n"
-        
-        if job['location']:
-            message += f"📍 Location: {job['location']}\n"
-        
-        if job['salary']:
-            message += f"💰 Salary: {job['salary']}\n"
-        
-        if job['top_5_skills']:
-            message += f"⭐ Top 5 Skills: {job['top_5_skills']}\n"
-        elif job['skills']:
-            message += f"🎓 Skills: {job['skills']}\n"
-        
-        if job['recruiter']:
-            message += f"👤 Recruiter: {job['recruiter']}\n"
-        
-        message += f"📅 Posted: {job['created_at']}\n"
-        message += f"📊 Role Status: {job['role_status']}\n"
-        message += f"\n🔗 View in Monday.com: https://adacahq.monday.com/boards/{BOARD_ID}/pulses/{job['id']}\n"
-        
-        # Post to Slack
-        if post_to_slack(message):
-            print(f"  ✅ Posted: {job['title']}")
-        else:
-            print(f"  ❌ Failed to post: {job['title']}")
+        for job in old_open_jobs:
+            message += f"━━━━━━━━━━━━━━━━━━━━━\n"
+            message += f"💼 *{job['title']}* ⚠️\n"
+            
+            if job['client']:
+                message += f"🏢 Client: *{job['client']}*\n"
+            
+            message += f"⏳ Open for: *{job['job_age_days']} days*\n"
+            
+            if job['location']:
+                message += f"📍 Location: {job['location']}\n"
+            
+            if job['salary']:
+                message += f"💰 Salary: {job['salary']}\n"
+            
+            if job['top_5_skills']:
+                message += f"⭐ Top 5 Skills: {job['top_5_skills']}\n"
+            elif job['skills']:
+                message += f"🎓 Skills: {job['skills']}\n"
+            
+            if job['recruiter']:
+                message += f"👤 Recruiter: {job['recruiter']}\n"
+            
+            message += f"📅 Originally Posted: {job['created_at']}\n"
+            message += f"📊 Role Status: {job['role_status']}\n"
+            message += f"🔗 View: https://adacahq.monday.com/boards/{BOARD_ID}/pulses/{job['id']}\n\n"
     
     # Post summary
-    summary = f"\n━━━━━━━━━━━━━━━━━━━━━\n"
-    summary += f"📊 *Summary*: {len(new_jobs)} new job opening(s) this week\n"
-    summary += f"💪 Let's find amazing talent for these roles!\n"
+    message += f"━━━━━━━━━━━━━━━━━━━━━\n"
+    message += f"📊 *Summary*\n"
+    message += f"🆕 New jobs: {len(new_jobs)}\n"
+    message += f"⏰ Still open (90+ days): {len(old_open_jobs)}\n"
+    message += f"📋 Total: {len(jobs)} position(s)\n"
+    message += f"\n💪 Let's find amazing talent for these roles!"
     
-    post_to_slack(summary)
-    print("✅ All job alerts posted!")
+    # Post to Slack
+    if post_to_slack(message):
+        print("✅ All job alerts posted!")
+    else:
+        print("❌ Failed to post to Slack")
 
 if __name__ == "__main__":
     post_job_alerts()
