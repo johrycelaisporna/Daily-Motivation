@@ -229,7 +229,7 @@ def check_new_hires():
         if buddy:
             message += f"🤝 *Buddy:* {buddy} is working on the same project and will be your go-to person for questions and support!\n\n"
         
-        message += "📋 Make sure to check out our Welcome Packet canvas in <#0a-newhire-welcome-packet> for all the essentials to get you started!\n\n"
+        message += "📚 Check out <#company-wiki> for all the essentials to get you started!\n\n"
         message += "Welcome aboard! We're excited to see what you'll accomplish here! 🚀"
         
         # Post to Slack
