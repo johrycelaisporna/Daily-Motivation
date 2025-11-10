@@ -1,18 +1,16 @@
 name: Coffee Matcher
-
 on:
   schedule:
-    # Runs every other Monday at 8:30 AM Manila time (12:30 AM UTC on Monday)
-    - cron: '30 0 * * 1'
+    # Runs every Monday at 6:00 AM Manila time (10:00 PM UTC Sunday)
+    - cron: '0 22 * * 0'
   workflow_dispatch: # Allows manual trigger for testing
-
 jobs:
   create-pairings:
     runs-on: ubuntu-latest
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -24,11 +22,13 @@ jobs:
       run: |
         # Get week number of the year
         WEEK=$(date +%V)
-        # Run only on even weeks
-        if [ $((WEEK % 2)) -eq 0 ]; then
+        # Run only on odd weeks (to skip next week after this Thursday)
+        if [ $((WEEK % 2)) -eq 1 ]; then
           echo "should_run=true" >> $GITHUB_OUTPUT
+          echo "✅ Week $WEEK (odd) - Running coffee matcher"
         else
           echo "should_run=false" >> $GITHUB_OUTPUT
+          echo "⏭️ Week $WEEK (even) - Skipping"
         fi
     
     - name: Run coffee matcher
@@ -37,4 +37,4 @@ jobs:
         MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
         SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
       run: |
-        python coffee_matcher.py
+        python3 coffee_matcher.py
