@@ -27,26 +27,51 @@ def save_quote_history(quotes):
         json.dump(quotes[-30:], f)  # Keep only last 30 quotes
 
 def generate_unique_quote(previous_quotes):
-    """Generate a quote that's different from recent ones"""
-    print("🤖 Asking Claude for a motivational quote...")
+    """Generate a quote/joke that's different from recent ones"""
+    print("🤖 Asking Claude for daily inspiration...")
     
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     
-    # Build context about previous quotes to avoid repetition
+    # Build context about previous content to avoid repetition
     context = ""
     if previous_quotes:
-        recent_quotes = previous_quotes[-10:]  # Last 10 quotes
-        context = f"\n\nAvoid repeating these recent themes and quotes:\n" + "\n".join(f"- {q}" for q in recent_quotes)
+        recent_quotes = previous_quotes[-10:]  # Last 10 items
+        context = f"\n\nAvoid repeating these recent themes, topics, and content:\n" + "\n".join(f"- {q}" for q in recent_quotes)
     
-    prompt = f"""Generate one inspiring motivational quote for a tech recruitment team at Adaca. 
+    # Randomly choose the type of content
+    import random
+    content_type = random.choice(['personal', 'dev', 'joke'])
+    
+    if content_type == 'personal':
+        prompt = f"""Generate one inspiring personal growth quote that applies to anyone. 
 
 Requirements:
-- Make it uplifting and relevant to their work in recruitment, connecting talent with opportunities
-- Focus on themes like: impact, growth, perseverance, teamwork, making a difference, or innovation
+- Make it about: personal growth, resilience, mindset, overcoming challenges, self-improvement, finding purpose, or inner strength
 - Keep it concise (1-2 sentences maximum)
 - Make it fresh and unique - avoid clichés
 - Don't include attribution, quotation marks, or any preamble
 - Vary the style: sometimes use metaphors, sometimes be direct, sometimes be poetic{context}"""
+    
+    elif content_type == 'dev':
+        prompt = f"""Generate one inspiring quote about software development, coding, or technology. 
+
+Requirements:
+- Make it about: coding mindset, problem-solving, debugging life, continuous learning, building things, innovation, or tech culture
+- Keep it concise (1-2 sentences maximum)
+- Make it fresh and unique - avoid clichés
+- Don't include attribution, quotation marks, or any preamble
+- Can be thoughtful or slightly humorous{context}"""
+    
+    else:  # joke
+        prompt = f"""Generate one SHORT, clever programming/tech joke or pun. 
+
+Requirements:
+- Keep it super short (1-3 lines max)
+- Make it actually funny and relatable to developers/tech people
+- Can be a one-liner, a short setup-punchline, or a clever observation
+- Avoid overused jokes like "works on my machine" or "undefined is not a function"
+- Don't explain the joke or add commentary
+- Fresh and original{context}"""
 
     message = client.messages.create(
         model="claude-sonnet-4-20250514",
@@ -55,6 +80,7 @@ Requirements:
     )
     
     quote = message.content[0].text.strip()
+    print(f"📝 Generated {content_type} content")
     return quote
 
 def post_to_slack(message):
