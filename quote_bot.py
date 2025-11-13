@@ -3,7 +3,7 @@ import json
 import urllib.request
 import urllib.parse
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 # Get configuration from environment variables
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY')
@@ -93,8 +93,15 @@ def main():
         quote_history.append(quote)
         save_quote_history(quote_history)
         
-        # Get day of week for variation
-        day_of_week = datetime.now().strftime('%A')
+        # Get Manila time properly
+        utc_now = datetime.now(timezone.utc)
+        manila_tz = timezone(timedelta(hours=8))
+        manila_now = utc_now.astimezone(manila_tz)
+        day_of_week = manila_now.strftime('%A')
+        
+        print(f"📅 UTC time: {utc_now.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+        print(f"📅 Manila time: {manila_now.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"📅 Day of week: {day_of_week}")
         
         # Vary the greeting based on day
         greetings = {
