@@ -227,9 +227,6 @@ def post_job_alerts():
         for job in new_jobs:
             message += f"🔥 *{job['title']}*\n"
             
-            if job['client']:
-                message += f"   🏢 Client: *{job['client']}*\n"
-            
             if job['top_5_skills']:
                 message += f"   🎯 Skills: {job['top_5_skills']}\n"
             
