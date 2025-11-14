@@ -218,51 +218,43 @@ def post_job_alerts():
     regular_jobs.sort(key=lambda x: x['job_age_days'])
     
     # Build message
-    message = f"🎉 *WEEKLY JOB OPENINGS* 🎉\n\n"
-    message += f"💰 *REFER & EARN!* Get a bonus when your referral is regularized! 💰\n\n"
+    message = f"*WEEKLY JOB OPENINGS*\n\n"
+    message += f"💰 Refer & earn a bonus when your referral is regularized!\n\n"
     
     if new_jobs:
-        message += f"✨ *HOT OFF THE PRESS - NEW THIS WEEK!* ({len(new_jobs)})\n\n"
+        message += f"*NEW THIS WEEK* ({len(new_jobs)})\n\n"
         
         for job in new_jobs:
-            message += f"🔥 *{job['title']}*\n"
+            message += f"• *{job['title']}*\n"
             
             if job['top_5_skills']:
-                message += f"   🎯 Skills: {job['top_5_skills']}\n"
+                message += f"  Skills: {job['top_5_skills']}\n"
             
             if job['headcount']:
-                message += f"   👥 Headcount: {job['headcount']}\n"
+                message += f"  Headcount: {job['headcount']}\n"
             
-            message += f"   📅 Posted: {job['created_at']}\n\n"
+            message += f"  Posted: {job['created_at']}\n\n"
     
     if regular_jobs:
-        message += f"\n📋 *ALL ACTIVE OPENINGS* ({len(regular_jobs)})\n"
-        message += f"_Help us fill these roles - your network is powerful!_ 🌟\n\n"
+        message += f"\n*ALL ACTIVE OPENINGS* ({len(regular_jobs)})\n\n"
         
         for job in regular_jobs:
-            age_emoji = "🔥" if job['job_age_days'] <= 7 else "⚡" if job['job_age_days'] <= 30 else "📌"
-            
-            message += f"{age_emoji} *{job['title']}*\n"
-            
-            if job['client']:
-                message += f"   🏢 Client: *{job['client']}*\n"
+            message += f"• *{job['title']}*\n"
             
             if job['top_5_skills']:
-                message += f"   🎯 Skills: {job['top_5_skills']}\n"
+                message += f"  Skills: {job['top_5_skills']}\n"
             
             if job['headcount']:
-                message += f"   👥 Headcount: {job['headcount']}\n"
+                message += f"  Headcount: {job['headcount']}\n"
             
-            message += f"   ⏰ Open for: {job['job_age_days']} days\n\n"
+            message += f"  Open for: {job['job_age_days']} days\n\n"
     
     # Post summary
-    message += f"━━━━━━━━━━━━━━━━━━━━━\n"
-    message += f"📊 *SUMMARY*\n"
-    message += f"✨ New this week: {len(new_jobs)}\n"
-    message += f"📋 Total active: {len(jobs)}\n\n"
-    message += f"💡 *Know someone perfect for these roles?*\n"
-    message += f"Refer them and earn a bonus when they're regularized! 🎁\n\n"
-    message += f"🚀 Let's build amazing teams together!"
+    message += f"───────────────────\n"
+    message += f"*SUMMARY*\n"
+    message += f"New this week: {len(new_jobs)}\n"
+    message += f"Total active: {len(jobs)}\n\n"
+    message += f"Know someone perfect for these roles? Refer them and earn a bonus when they're regularized!"
     
     # Post to Slack
     if post_to_slack(message):
