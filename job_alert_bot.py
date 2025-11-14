@@ -142,6 +142,10 @@ def get_new_jobs():
                     col_id = col.get('id', '')
                     col_text = (col.get('text') or '').strip()
                     
+                    # Debug: print all columns to help identify the right IDs
+                    if col_text:
+                        print(f"      Column '{col_id}': {col_text}")
+                    
                     # Map column IDs
                     if col_id == 'status7':  # Role Status
                         role_status = col_text
@@ -149,7 +153,7 @@ def get_new_jobs():
                         client = col_text
                     elif col_id == 'dropdown_mkxfm4d1':  # Top 5 skills needed
                         top_5_skills = col_text
-                    elif col_id == 'numbers':  # Headcount (adjust col_id if needed)
+                    elif 'number' in col_id.lower() or 'headcount' in col_id.lower() or 'head_count' in col_id.lower():  # Headcount
                         headcount = col_text
                     elif col_id == 'date_1_mkn7ny21':  # Job Listed
                         job_listed_date = col_text
@@ -245,8 +249,7 @@ def post_job_alerts():
             if job['headcount']:
                 message += f"   👥 Headcount: {job['headcount']}\n"
             
-            message += f"   📅 Posted: {job['created_at']}\n"
-            message += f"   🔗 <https://adacahq.monday.com/boards/{BOARD_ID}/pulses/{job['id']}|View Details>\n\n"
+            message += f"   📅 Posted: {job['created_at']}\n\n"
     
     if regular_jobs:
         message += f"\n📋 *ALL ACTIVE OPENINGS* ({len(regular_jobs)})\n"
@@ -266,8 +269,7 @@ def post_job_alerts():
             if job['headcount']:
                 message += f"   👥 Headcount: {job['headcount']}\n"
             
-            message += f"   ⏰ Open for: {job['job_age_days']} days\n"
-            message += f"   🔗 <https://adacahq.monday.com/boards/{BOARD_ID}/pulses/{job['id']}|View Details>\n\n"
+            message += f"   ⏰ Open for: {job['job_age_days']} days\n\n"
     
     # Post summary
     message += f"━━━━━━━━━━━━━━━━━━━━━\n"
