@@ -158,20 +158,7 @@ def get_new_jobs():
                     elif col_id == 'date_1_mkn7ny21':  # Job Listed
                         job_listed_date = col_text
                 
-                # Check Role Status first
-                if not role_status:
-                    print(f"    ✗ {job_title}: No role status found")
-                    continue
-                
-                # Normalize the role status
-                role_status_normalized = role_status.replace('–', '-').replace('  ', ' ').lower().strip()
-                allowed_statuses = ['need more profiles', 'in progress', 'sales - new lead']
-                
-                if role_status_normalized not in allowed_statuses:
-                    print(f"    ✗ {job_title}: Role status is '{role_status}', skipping")
-                    continue
-                
-                # Parse Job Listed date
+                # Check if Job Listed date exists (still required)
                 if not job_listed_date:
                     print(f"    ✗ {job_title}: No 'Job Listed' date found")
                     continue
