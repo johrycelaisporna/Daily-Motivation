@@ -111,12 +111,11 @@ def get_new_jobs():
         # Get today and time ranges in Manila timezone
         manila_tz = timezone(timedelta(hours=8))
         today = datetime.now(manila_tz)
-        seven_days_ago = today - timedelta(days=7)
-        three_months_ago = today - timedelta(days=90)
+        three_days_ago = today - timedelta(days=3)
+        ninety_days_ago = today - timedelta(days=90)
         
-        print(f"Looking for:")
-        print(f"  - New jobs added in last 7 days (since {seven_days_ago.strftime('%Y-%m-%d')})")
-        print(f"  - Open jobs older than 3 months (before {three_months_ago.strftime('%Y-%m-%d')})")
+        print(f"Looking for jobs added in last 3 days (since {three_days_ago.strftime('%Y-%m-%d')})")
+        print(f"And jobs open for 0-90+ days")
         
         for group in groups:
             group_title = group.get('title', '')
@@ -133,32 +132,25 @@ def get_new_jobs():
                 job_title = item.get('name', '').strip()
                 job_id = item.get('id', '')
                 
-                recruiter = ""
-                status = ""
                 role_status = ""
                 client = ""
-                location = ""
-                skills = ""
                 top_5_skills = ""
+                headcount = ""
                 job_listed_date = ""
                 
                 for col in item['column_values']:
                     col_id = col.get('id', '')
                     col_text = (col.get('text') or '').strip()
                     
-                    # Map column IDs based on debug output
-                    if col_id == 'people':  # Recruiter
-                        recruiter = col_text
-                    elif col_id == 'status7':  # Role Status
+                    # Map column IDs
+                    if col_id == 'status7':  # Role Status
                         role_status = col_text
-                    elif col_id == 'status_mkn7hmst':  # Hiring Status
-                        status = col_text
                     elif col_id == 'dropdown':  # Client
                         client = col_text
-                    elif col_id == 'color_mknjx0n':  # Role Type
-                        location = col_text
                     elif col_id == 'dropdown_mkxfm4d1':  # Top 5 skills needed
                         top_5_skills = col_text
+                    elif col_id == 'numbers':  # Headcount (adjust col_id if needed)
+                        headcount = col_text
                     elif col_id == 'date_1_mkn7ny21':  # Job Listed
                         job_listed_date = col_text
                 
@@ -167,7 +159,7 @@ def get_new_jobs():
                     print(f"    ✗ {job_title}: No role status found")
                     continue
                 
-                # Normalize the role status - replace both dash types and normalize spacing
+                # Normalize the role status
                 role_status_normalized = role_status.replace('–', '-').replace('  ', ' ').lower().strip()
                 allowed_statuses = ['need more profiles', 'in progress', 'sales - new lead']
                 
@@ -195,30 +187,19 @@ def get_new_jobs():
                 # Calculate age of job
                 job_age_days = (today - listed_date).days
                 
-                # Check if job qualifies:
-                # Option A: Listed in last 7 days
-                # OR
-                # Option C: Open for more than 3 months (90 days) with qualifying status
-                is_new = listed_date >= seven_days_ago
-                is_old_open = job_age_days > 90
+                # Include jobs from 0 to 90+ days
+                # Alert specifically for jobs added in last 3 days
+                is_new = listed_date >= three_days_ago
                 
-                if not (is_new or is_old_open):
-                    print(f"    ✗ {job_title}: {job_age_days} days old (not new and not >90 days)")
-                    continue
-                
-                job_type = "🆕 NEW" if is_new else "⏰ STILL OPEN (90+ days)"
-                print(f"    ✓ {job_type}: {job_title} ({job_age_days} days old)")
+                print(f"    ✓ {job_title} ({job_age_days} days old) {'🆕 NEW!' if is_new else ''}")
                 
                 new_jobs.append({
                     'id': job_id,
                     'title': job_title,
-                    'recruiter': recruiter,
-                    'status': status,
                     'role_status': role_status,
                     'client': client,
-                    'location': location,
-                    'skills': skills,
                     'top_5_skills': top_5_skills,
+                    'headcount': headcount or "1",
                     'created_at': listed_date.strftime('%B %d, %Y'),
                     'job_age_days': job_age_days,
                     'is_new': is_new
@@ -237,77 +218,69 @@ def post_job_alerts():
         print("ℹ️ No jobs to post")
         return
     
-    # Separate new vs old open jobs
+    # Separate new vs regular jobs
     new_jobs = [j for j in jobs if j['is_new']]
-    old_open_jobs = [j for j in jobs if not j['is_new']]
+    regular_jobs = [j for j in jobs if not j['is_new']]
+    
+    # Sort by age (newest first)
+    new_jobs.sort(key=lambda x: x['job_age_days'])
+    regular_jobs.sort(key=lambda x: x['job_age_days'])
     
     # Build message
-    message = f"🎯 *WEEKLY JOB ALERTS* 🎯\n\n"
+    message = f"🎉 *WEEKLY JOB OPENINGS* 🎉\n\n"
+    message += f"💰 *REFER & EARN!* Get a bonus when your referral is regularized! 💰\n\n"
     
     if new_jobs:
-        message += f"🆕 *NEW JOBS THIS WEEK* ({len(new_jobs)})\n\n"
+        message += f"✨ *HOT OFF THE PRESS - NEW THIS WEEK!* ({len(new_jobs)})\n\n"
         
         for job in new_jobs:
-            message += f"━━━━━━━━━━━━━━━━━━━━━\n"
-            message += f"💼 *{job['title']}*\n"
+            message += f"🔥 *{job['title']}*\n"
             
             if job['client']:
-                message += f"🏢 Client: *{job['client']}*\n"
-            
-            if job['location']:
-                message += f"📍 Location: {job['location']}\n"
+                message += f"   🏢 Client: *{job['client']}*\n"
             
             if job['top_5_skills']:
-                message += f"⭐ Top 5 Skills: {job['top_5_skills']}\n"
-            elif job['skills']:
-                message += f"🎓 Skills: {job['skills']}\n"
+                message += f"   🎯 Skills: {job['top_5_skills']}\n"
             
-            if job['recruiter']:
-                message += f"👤 Recruiter: {job['recruiter']}\n"
+            if job['headcount']:
+                message += f"   👥 Headcount: {job['headcount']}\n"
             
-            message += f"📅 Posted: {job['created_at']}\n"
-            message += f"📊 Role Status: {job['role_status']}\n"
-            message += f"🔗 View: https://adacahq.monday.com/boards/{BOARD_ID}/pulses/{job['id']}\n\n"
+            message += f"   📅 Posted: {job['created_at']}\n"
+            message += f"   🔗 <https://adacahq.monday.com/boards/{BOARD_ID}/pulses/{job['id']}|View Details>\n\n"
     
-    if old_open_jobs:
-        message += f"\n⏰ *STILL OPEN - NEED URGENT ATTENTION* ({len(old_open_jobs)})\n"
-        message += f"_These positions have been open for 90+ days_\n\n"
+    if regular_jobs:
+        message += f"\n📋 *ALL ACTIVE OPENINGS* ({len(regular_jobs)})\n"
+        message += f"_Help us fill these roles - your network is powerful!_ 🌟\n\n"
         
-        for job in old_open_jobs:
-            message += f"━━━━━━━━━━━━━━━━━━━━━\n"
-            message += f"💼 *{job['title']}* ⚠️\n"
+        for job in regular_jobs:
+            age_emoji = "🔥" if job['job_age_days'] <= 7 else "⚡" if job['job_age_days'] <= 30 else "📌"
+            
+            message += f"{age_emoji} *{job['title']}*\n"
             
             if job['client']:
-                message += f"🏢 Client: *{job['client']}*\n"
-            
-            message += f"⏳ Open for: *{job['job_age_days']} days*\n"
-            
-            if job['location']:
-                message += f"📍 Location: {job['location']}\n"
+                message += f"   🏢 Client: *{job['client']}*\n"
             
             if job['top_5_skills']:
-                message += f"⭐ Top 5 Skills: {job['top_5_skills']}\n"
-            elif job['skills']:
-                message += f"🎓 Skills: {job['skills']}\n"
+                message += f"   🎯 Skills: {job['top_5_skills']}\n"
             
-            if job['recruiter']:
-                message += f"👤 Recruiter: {job['recruiter']}\n"
+            if job['headcount']:
+                message += f"   👥 Headcount: {job['headcount']}\n"
             
-            message += f"📅 Originally Posted: {job['created_at']}\n"
-            message += f"📊 Role Status: {job['role_status']}\n"
-            message += f"🔗 View: https://adacahq.monday.com/boards/{BOARD_ID}/pulses/{job['id']}\n\n"
+            message += f"   ⏰ Open for: {job['job_age_days']} days\n"
+            message += f"   🔗 <https://adacahq.monday.com/boards/{BOARD_ID}/pulses/{job['id']}|View Details>\n\n"
     
     # Post summary
     message += f"━━━━━━━━━━━━━━━━━━━━━\n"
-    message += f"📊 *Summary*\n"
-    message += f"🆕 New jobs: {len(new_jobs)}\n"
-    message += f"⏰ Still open (90+ days): {len(old_open_jobs)}\n"
-    message += f"📋 Total: {len(jobs)} position(s)\n"
-    message += f"\n💪 Let's find amazing talent for these roles!"
+    message += f"📊 *SUMMARY*\n"
+    message += f"✨ New this week: {len(new_jobs)}\n"
+    message += f"📋 Total active: {len(jobs)}\n\n"
+    message += f"💡 *Know someone perfect for these roles?*\n"
+    message += f"Refer them and earn a bonus when they're regularized! 🎁\n\n"
+    message += f"🚀 Let's build amazing teams together!"
     
     # Post to Slack
     if post_to_slack(message):
-        print("✅ All job alerts posted!")
+        print("✅ Job alerts posted successfully!")
     else:
         print("❌ Failed to post to Slack")
 
