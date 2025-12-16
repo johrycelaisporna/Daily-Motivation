@@ -89,22 +89,46 @@ def fetch_benched_employees():
                 'project': '',
                 'position': '',
                 'branch': '',
-                'contract_end': ''
+                'contract_end': '',
+                'cv_files': []
             }
             
             # Parse column values
             for col in item.get('column_values', []):
-                col_id = col.get('id', '').lower()
+                col_id = col.get('id', '')
                 col_text = col.get('text', '')
+                col_value = col.get('value', '')
+                col_type = col.get('type', '')
                 
-                if 'project' in col_id:
+                # Map columns (case-insensitive matching)
+                col_id_lower = col_id.lower()
+                
+                if col_id_lower == 'project':
                     employee['project'] = col_text
-                elif 'position' in col_id:
+                elif col_id_lower == 'position':
                     employee['position'] = col_text
-                elif 'branch' in col_id:
+                elif col_id_lower == 'branch':
                     employee['branch'] = col_text
-                elif 'contract' in col_id and 'end' in col_id:
+                elif 'contract' in col_id_lower and 'end' in col_id_lower:
                     employee['contract_end'] = col_text
+                elif col_id_lower == 'contract_end_date':
+                    employee['contract_end'] = col_text
+                elif col_id_lower == 'date' or col_id_lower == 'end_date':
+                    employee['contract_end'] = col_text
+                
+                # Check specifically for "Adaca CV" column
+                if 'adaca' in col_id_lower and 'cv' in col_id_lower:
+                    try:
+                        if col_value:
+                            files_data = json.loads(col_value)
+                            if isinstance(files_data, dict) and 'files' in files_data:
+                                for file_info in files_data['files']:
+                                    employee['cv_files'].append({
+                                        'name': file_info.get('name', 'CV'),
+                                        'url': file_info.get('url', '')
+                                    })
+                    except (json.JSONDecodeError, TypeError):
+                        pass
             
             benched_employees.append(employee)
         
@@ -132,6 +156,13 @@ def send_slack_notification(benched_employees):
             details += f"  └ Position: {emp['position'] or 'N/A'}\n"
             details += f"  └ Branch: {emp['branch'] or 'N/A'}\n"
             details += f"  └ Contract End: {emp['contract_end'] or 'N/A'}"
+            
+            # Add CV files if any
+            if emp['cv_files']:
+                details += "\n  └ Adaca CV:"
+                for file in emp['cv_files']:
+                    details += f"\n     • <{file['url']}|{file['name']}>"
+            
             employee_details.append(details)
         
         employee_list = "\n\n".join(employee_details)
