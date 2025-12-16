@@ -13,7 +13,7 @@ from datetime import datetime
 MONDAY_API_URL = "https://api.monday.com/v2"
 MONDAY_TOKEN = os.environ.get('MONDAY_API_TOKEN')
 BOARD_ID = "6329303796"
-GROUP_ID = "not_active_employees__bench_"
+GROUP_TITLE = "Not Active Employees (Bench)"  # Search by group title instead
 
 # Slack bot token
 SLACK_BOT_TOKEN = os.environ.get('SLACK_BOT_TOKEN')
@@ -22,10 +22,12 @@ SLACK_CHANNEL = "#benched-employees"
 def fetch_benched_employees():
     """Fetch items from the benched employees group in Monday.com"""
     
+    # Query to get all groups and find the one with matching title
     query = """
     query {
       boards(ids: %s) {
-        groups(ids: ["%s"]) {
+        groups {
+          id
           title
           items_page {
             items {
@@ -40,7 +42,7 @@ def fetch_benched_employees():
         }
       }
     }
-    """ % (BOARD_ID, GROUP_ID)
+    """ % BOARD_ID
 
     headers = {
         "Authorization": MONDAY_TOKEN,
@@ -58,14 +60,23 @@ def fetch_benched_employees():
         
         data = response.json()
         
-        # Extract benched employees
+        # Find the group with matching title
         groups = data.get('data', {}).get('boards', [{}])[0].get('groups', [])
         
-        if not groups:
-            print("Warning: Group not found or empty")
+        target_group = None
+        for group in groups:
+            if group.get('title') == GROUP_TITLE:
+                target_group = group
+                break
+        
+        if not target_group:
+            print(f"Warning: Group '{GROUP_TITLE}' not found")
+            print(f"Available groups: {[g.get('title') for g in groups]}")
             return []
         
-        items = groups[0].get('items_page', {}).get('items', [])
+        print(f"Found group: {target_group.get('title')} (ID: {target_group.get('id')})")
+        
+        items = target_group.get('items_page', {}).get('items', [])
         benched_employees = [item['name'] for item in items if item.get('name')]
         
         return benched_employees
