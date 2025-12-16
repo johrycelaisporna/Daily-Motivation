@@ -23,6 +23,7 @@ def fetch_benched_employees():
     """Fetch items from the benched employees group in Monday.com"""
     
     # Query to get all groups and find the one with matching title
+    # Include assets to get file URLs
     query = """
     query {
       boards(ids: %s) {
@@ -32,10 +33,17 @@ def fetch_benched_employees():
           items_page {
             items {
               name
+              assets {
+                id
+                name
+                url
+                public_url
+              }
               column_values {
                 id
                 text
                 value
+                type
               }
             }
           }
@@ -98,6 +106,20 @@ def fetch_benched_employees():
             print(f"Employee: {item['name']}")
             print(f"{'='*60}")
             
+            # First, check if there are assets (files) directly on the item
+            assets = item.get('assets', [])
+            if assets:
+                print(f"Found {len(assets)} assets attached to item")
+                for asset in assets:
+                    file_url = asset.get('public_url') or asset.get('url') or ''
+                    file_name = asset.get('name', 'Document')
+                    if file_url:
+                        employee['cv_files'].append({
+                            'name': file_name,
+                            'url': file_url
+                        })
+                        print(f"  >>> Added asset: {file_name} - {file_url[:50]}...")
+            
             for col in item.get('column_values', []):
                 col_id = col.get('id', '')
                 col_text = col.get('text', '')
@@ -125,37 +147,43 @@ def fetch_benched_employees():
                     if col_text:
                         employee['contract_end'] = col_text
                 
-                # Check specifically for "Adaca CV" column (file type)
+                # Check file columns and extract asset IDs
                 if col_type == 'file' or 'cv' in col_id_lower or 'adaca' in col_id_lower:
                     try:
                         if col_value and col_value != '':
                             files_data = json.loads(col_value)
                             print(f"  >>> Found file column! Data: {files_data}")
-                            if isinstance(files_data, dict) and 'files' in files_data:
+                            
+                            # If we didn't get files from assets, try to extract from column value
+                            if isinstance(files_data, dict) and 'files' in files_data and not employee['cv_files']:
                                 for file_info in files_data['files']:
-                                    # Try multiple URL fields
-                                    file_url = (
-                                        file_info.get('url') or 
-                                        file_info.get('public_url') or 
-                                        file_info.get('assetUrl') or
-                                        file_info.get('urlPublic') or
-                                        ''
-                                    )
+                                    # Try to match with assets by name or ID
                                     file_name = file_info.get('name', 'CV')
+                                    asset_id = file_info.get('assetId') or file_info.get('id')
                                     
-                                    if file_url:
-                                        employee['cv_files'].append({
-                                            'name': file_name,
-                                            'url': file_url
-                                        })
-                                        print(f"  >>> Added file: {file_name} - URL: {file_url[:50]}...")
+                                    # Try to find matching asset
+                                    matched_asset = None
+                                    if asset_id and assets:
+                                        for asset in assets:
+                                            if str(asset.get('id')) == str(asset_id):
+                                                matched_asset = asset
+                                                break
+                                    
+                                    if matched_asset:
+                                        file_url = matched_asset.get('public_url') or matched_asset.get('url') or ''
+                                        if file_url:
+                                            employee['cv_files'].append({
+                                                'name': file_name,
+                                                'url': file_url
+                                            })
+                                            print(f"  >>> Matched asset: {file_name} - {file_url[:50]}...")
                                     else:
-                                        # If no URL, just add the filename
+                                        # No URL found
                                         employee['cv_files'].append({
                                             'name': file_name,
                                             'url': None
                                         })
-                                        print(f"  >>> Added file without URL: {file_name}")
+                                        print(f"  >>> File without URL: {file_name}")
                     except (json.JSONDecodeError, TypeError) as e:
                         print(f"  >>> Error parsing file: {e}")
             
