@@ -16,7 +16,7 @@ BOARD_ID = "6329303796"
 GROUP_ID = "not_active_employees__bench_"
 
 # Slack webhook URL
-SLACK_WEBHOOK = os.environ.get('SLACK_WEBHOOK_URL')
+SLACK_WEBHOOK = os.environ.get('SLACK_WEBHOOK_URL') or os.environ.get('SLACK_WEBHOOK')
 
 def fetch_benched_employees():
     """Fetch items from the benched employees group in Monday.com"""
