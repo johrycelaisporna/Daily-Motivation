@@ -93,42 +93,60 @@ def fetch_benched_employees():
                 'cv_files': []
             }
             
-            # Parse column values
+            # Parse column values - ENABLE DEBUGGING
+            print(f"\n{'='*60}")
+            print(f"Employee: {item['name']}")
+            print(f"{'='*60}")
+            
             for col in item.get('column_values', []):
                 col_id = col.get('id', '')
                 col_text = col.get('text', '')
                 col_value = col.get('value', '')
                 col_type = col.get('type', '')
                 
+                # Print ALL columns for debugging
+                print(f"Column ID: '{col_id}'")
+                print(f"  Type: {col_type}")
+                print(f"  Text: {col_text}")
+                if col_value and len(col_value) < 200:
+                    print(f"  Value: {col_value}")
+                print()
+                
                 # Map columns (case-insensitive matching)
                 col_id_lower = col_id.lower()
                 
-                if col_id_lower == 'project':
+                if col_id_lower == 'project' or col_text == 'Project':
                     employee['project'] = col_text
-                elif col_id_lower == 'position':
+                elif col_id_lower == 'position' or 'position' in col_id_lower:
                     employee['position'] = col_text
-                elif col_id_lower == 'branch':
+                elif col_id_lower == 'branch' or 'branch' in col_id_lower:
                     employee['branch'] = col_text
-                elif 'contract' in col_id_lower and 'end' in col_id_lower:
-                    employee['contract_end'] = col_text
-                elif col_id_lower == 'contract_end_date':
-                    employee['contract_end'] = col_text
-                elif col_id_lower == 'date' or col_id_lower == 'end_date':
-                    employee['contract_end'] = col_text
+                elif 'contract' in col_id_lower or 'end' in col_id_lower or 'date' in col_id_lower:
+                    if col_text:
+                        employee['contract_end'] = col_text
                 
-                # Check specifically for "Adaca CV" column
-                if 'adaca' in col_id_lower and 'cv' in col_id_lower:
+                # Check specifically for "Adaca CV" column (file type)
+                if col_type == 'file' or 'cv' in col_id_lower or 'adaca' in col_id_lower:
                     try:
-                        if col_value:
+                        if col_value and col_value != '':
                             files_data = json.loads(col_value)
+                            print(f"  >>> Found file column! Data: {files_data}")
                             if isinstance(files_data, dict) and 'files' in files_data:
                                 for file_info in files_data['files']:
                                     employee['cv_files'].append({
                                         'name': file_info.get('name', 'CV'),
                                         'url': file_info.get('url', '')
                                     })
-                    except (json.JSONDecodeError, TypeError):
-                        pass
+                                    print(f"  >>> Added file: {file_info.get('name')}")
+                    except (json.JSONDecodeError, TypeError) as e:
+                        print(f"  >>> Error parsing file: {e}")
+            
+            print(f"\nFinal employee data:")
+            print(f"  Project: {employee['project']}")
+            print(f"  Position: {employee['position']}")
+            print(f"  Branch: {employee['branch']}")
+            print(f"  Contract End: {employee['contract_end']}")
+            print(f"  CV Files: {len(employee['cv_files'])} found")
             
             benched_employees.append(employee)
         
