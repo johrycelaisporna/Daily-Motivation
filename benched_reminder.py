@@ -133,11 +133,29 @@ def fetch_benched_employees():
                             print(f"  >>> Found file column! Data: {files_data}")
                             if isinstance(files_data, dict) and 'files' in files_data:
                                 for file_info in files_data['files']:
-                                    employee['cv_files'].append({
-                                        'name': file_info.get('name', 'CV'),
-                                        'url': file_info.get('url', '')
-                                    })
-                                    print(f"  >>> Added file: {file_info.get('name')}")
+                                    # Try multiple URL fields
+                                    file_url = (
+                                        file_info.get('url') or 
+                                        file_info.get('public_url') or 
+                                        file_info.get('assetUrl') or
+                                        file_info.get('urlPublic') or
+                                        ''
+                                    )
+                                    file_name = file_info.get('name', 'CV')
+                                    
+                                    if file_url:
+                                        employee['cv_files'].append({
+                                            'name': file_name,
+                                            'url': file_url
+                                        })
+                                        print(f"  >>> Added file: {file_name} - URL: {file_url[:50]}...")
+                                    else:
+                                        # If no URL, just add the filename
+                                        employee['cv_files'].append({
+                                            'name': file_name,
+                                            'url': None
+                                        })
+                                        print(f"  >>> Added file without URL: {file_name}")
                     except (json.JSONDecodeError, TypeError) as e:
                         print(f"  >>> Error parsing file: {e}")
             
@@ -179,7 +197,12 @@ def send_slack_notification(benched_employees):
             if emp['cv_files']:
                 details += "\n  └ Adaca CV:"
                 for file in emp['cv_files']:
-                    details += f"\n     • <{file['url']}|{file['name']}>"
+                    if file['url']:
+                        # Clickable link if URL exists
+                        details += f"\n     • <{file['url']}|{file['name']}>"
+                    else:
+                        # Just show filename if no URL
+                        details += f"\n     • {file['name']} (Contact HR for access)"
             
             employee_details.append(details)
         
