@@ -77,7 +77,36 @@ def fetch_benched_employees():
         print(f"Found group: {target_group.get('title')} (ID: {target_group.get('id')})")
         
         items = target_group.get('items_page', {}).get('items', [])
-        benched_employees = [item['name'] for item in items if item.get('name')]
+        
+        # Extract employee details with column values
+        benched_employees = []
+        for item in items:
+            if not item.get('name'):
+                continue
+                
+            employee = {
+                'name': item['name'],
+                'project': '',
+                'position': '',
+                'branch': '',
+                'contract_end': ''
+            }
+            
+            # Parse column values
+            for col in item.get('column_values', []):
+                col_id = col.get('id', '').lower()
+                col_text = col.get('text', '')
+                
+                if 'project' in col_id:
+                    employee['project'] = col_text
+                elif 'position' in col_id:
+                    employee['position'] = col_text
+                elif 'branch' in col_id:
+                    employee['branch'] = col_text
+                elif 'contract' in col_id and 'end' in col_id:
+                    employee['contract_end'] = col_text
+            
+            benched_employees.append(employee)
         
         return benched_employees
         
@@ -95,7 +124,18 @@ def send_slack_notification(benched_employees):
     current_date = datetime.now().strftime("%B %d, %Y")
     
     if benched_employees:
-        employee_list = "\n".join([f"• {emp}" for emp in benched_employees])
+        # Create formatted table
+        employee_details = []
+        for emp in benched_employees:
+            details = f"*{emp['name']}*\n"
+            details += f"  └ Project: {emp['project'] or 'N/A'}\n"
+            details += f"  └ Position: {emp['position'] or 'N/A'}\n"
+            details += f"  └ Branch: {emp['branch'] or 'N/A'}\n"
+            details += f"  └ Contract End: {emp['contract_end'] or 'N/A'}"
+            employee_details.append(details)
+        
+        employee_list = "\n\n".join(employee_details)
+        
         message = f"""
 :warning: *Benched Employees Report - {current_date}*
 
