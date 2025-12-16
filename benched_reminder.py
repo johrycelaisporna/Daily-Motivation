@@ -15,8 +15,9 @@ MONDAY_TOKEN = os.environ.get('MONDAY_API_TOKEN')
 BOARD_ID = "6329303796"
 GROUP_ID = "not_active_employees__bench_"
 
-# Slack webhook URL
-SLACK_WEBHOOK = os.environ.get('SLACK_WEBHOOK_URL') or os.environ.get('SLACK_WEBHOOK')
+# Slack bot token
+SLACK_BOT_TOKEN = os.environ.get('SLACK_BOT_TOKEN')
+SLACK_CHANNEL = "#benched-employees"
 
 def fetch_benched_employees():
     """Fetch items from the benched employees group in Monday.com"""
@@ -102,25 +103,43 @@ _Please review and take appropriate action._
 Great news! There are currently no employees on the bench.
 """
 
-    slack_payload = {
+    # Use Slack API with bot token
+    slack_url = "https://slack.com/api/chat.postMessage"
+    
+    headers = {
+        "Authorization": f"Bearer {SLACK_BOT_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "channel": SLACK_CHANNEL,
         "text": message,
         "mrkdwn": True
     }
 
     try:
         response = requests.post(
-            SLACK_WEBHOOK,
-            headers={"Content-Type": "application/json"},
-            json=slack_payload,
+            slack_url,
+            headers=headers,
+            json=payload,
             timeout=30
         )
         response.raise_for_status()
+        
+        result = response.json()
+        
+        if not result.get('ok'):
+            error_msg = result.get('error', 'Unknown error')
+            raise Exception(f"Slack API error: {error_msg}")
         
         print(f"✓ Successfully sent notification to Slack")
         print(f"✓ Found {len(benched_employees)} benched employee(s)")
         
     except requests.exceptions.RequestException as e:
         print(f"Error sending to Slack: {e}")
+        raise
+    except Exception as e:
+        print(f"Slack API error: {e}")
         raise
 
 def main():
@@ -129,8 +148,8 @@ def main():
     # Validate environment variables
     if not MONDAY_TOKEN:
         raise ValueError("MONDAY_API_TOKEN environment variable not set")
-    if not SLACK_WEBHOOK:
-        raise ValueError("SLACK_WEBHOOK_URL environment variable not set")
+    if not SLACK_BOT_TOKEN:
+        raise ValueError("SLACK_BOT_TOKEN environment variable not set")
     
     print("Fetching benched employees from Monday.com...")
     benched_employees = fetch_benched_employees()
