@@ -242,7 +242,7 @@ def get_employees_with_contracts():
     return employees
 
 def check_contract_expirations():
-    """Check for contracts expiring in 30, 60, 90 days, or already expired"""
+    """Check for contracts expiring in 30, 60 days, or already expired"""
     print("⏰ Checking contract expirations...")
     
     # Get today's date in Manila timezone
@@ -252,20 +252,17 @@ def check_contract_expirations():
     # Calculate future dates
     days_30 = today + timedelta(days=30)
     days_60 = today + timedelta(days=60)
-    days_90 = today + timedelta(days=90)
     
     print(f"Today: {today.strftime('%Y-%m-%d')}")
     print(f"30 days: {days_30.strftime('%Y-%m-%d')}")
     print(f"60 days: {days_60.strftime('%Y-%m-%d')}")
-    print(f"90 days: {days_90.strftime('%Y-%m-%d')}")
     
     # Get all employees
     employees = get_employees_with_contracts()
     
-    # Categorize by expiration timeframe (including past dates)
+    # Categorize by expiration timeframe - ONLY 30 and 60 days + expired
     expiring_30 = []
     expiring_60 = []
-    expiring_90 = []
     expired = []
     
     for emp in employees:
@@ -276,22 +273,21 @@ def check_contract_expirations():
             
             emp['days_until'] = days_until
             
-            # Include all expired contracts (any date before today)
+            # Only include expired and contracts expiring within 60 days
             if days_until < 0:
                 expired.append(emp)
             elif days_until <= 30:
                 expiring_30.append(emp)
             elif days_until <= 60:
                 expiring_60.append(emp)
-            elif days_until <= 90:
-                expiring_90.append(emp)
                 
         except ValueError:
             continue
     
-    # Build and post alert message with traffic light colors - GROUPED BY PROJECT
-    if expired or expiring_30 or expiring_60 or expiring_90:
-        message = "🚦 *CONTRACT EXPIRATION ALERTS* 🚦\n\n"
+    # Build and post alert message - GROUPED BY PROJECT
+    if expired or expiring_30 or expiring_60:
+        message = "🚦 *CONTRACT EXPIRATION ALERTS* 🚦\n"
+        message += "_Showing contracts requiring immediate attention (60 days or less)_\n\n"
         
         # Combine all lists with their traffic light status
         all_alerts = []
@@ -309,11 +305,6 @@ def check_contract_expirations():
             emp['alert_type'] = 'orange'
             emp['emoji'] = '🟠'
             emp['label'] = 'ORANGE ALERT - 60 DAYS'
-            all_alerts.append(emp)
-        for emp in expiring_90:
-            emp['alert_type'] = 'yellow'
-            emp['emoji'] = '🟡'
-            emp['label'] = 'YELLOW ALERT - 90 DAYS'
             all_alerts.append(emp)
         
         # Group by project
@@ -343,10 +334,9 @@ def check_contract_expirations():
         message += "━━━━━━━━━━━━━━━━━━━━━\n"
         message += f"📊 *Summary*\n"
         message += f"⚫ Expired: {len(expired)}\n"
-        message += f"🔴 Red (30 days): {len(expiring_30)}\n"
-        message += f"🟠 Orange (60 days): {len(expiring_60)}\n"
-        message += f"🟡 Yellow (90 days): {len(expiring_90)}\n"
-        message += f"📋 Total contracts to review: {len(all_alerts)}\n"
+        message += f"🔴 Red (≤30 days): {len(expiring_30)}\n"
+        message += f"🟠 Orange (31-60 days): {len(expiring_60)}\n"
+        message += f"📋 Total contracts requiring action: {len(all_alerts)}\n"
         message += "━━━━━━━━━━━━━━━━━━━━━\n"
         message += "💼 Please review and take necessary action for contract renewals."
         
@@ -356,7 +346,7 @@ def check_contract_expirations():
         else:
             print("❌ Failed to post to Slack")
     else:
-        print("ℹ️ No contracts expiring in the next 90 days")
+        print("ℹ️ No contracts requiring immediate attention (all contracts are more than 60 days away)")
 
 if __name__ == "__main__":
     check_contract_expirations()
