@@ -2,7 +2,6 @@ name: Harvest Reminder Bot
 
 on:
   schedule:
-    # 3pm Sydney time = 05:00 UTC
     - cron: "0 5 10 * *"
     - cron: "0 5 25 * *"
   workflow_dispatch:
@@ -12,18 +11,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
-        run: pip install requests
-
       - name: Run Harvest Reminder Bot
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
         run: python harvest_reminder_bot.py
