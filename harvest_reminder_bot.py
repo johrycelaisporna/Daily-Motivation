@@ -1,31 +1,52 @@
 import os
-import requests
+import json
+import urllib.request
 
-SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
+# Configuration
+SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN")
+SLACK_CHANNEL = "au-contractors"
 
-def send_harvest_reminder():
-    if not SLACK_WEBHOOK_URL:
-        raise ValueError("Missing SLACK_WEBHOOK_URL env variable")
-
-    payload = {
-        "channel": "#au-contractors",
-        "text": (
-            "Hey team 👋\n"
-            "Payroll countdown has started ⏳\n\n"
-            "Quick check:\n"
-            "• Harvest time updated with clear task details 📝\n"
-            "• Invoices prepared and ready to submit 💸\n\n"
-            "Do this now, future you will be grateful 😄"
-        )
+def post_to_slack(message, channel=SLACK_CHANNEL):
+    """Post message to Slack"""
+    url = "https://slack.com/api/chat.postMessage"
+    headers = {
+        "Authorization": f"Bearer {SLACK_BOT_TOKEN}",
+        "Content-Type": "application/json"
     }
 
-    response = requests.post(
-        SLACK_WEBHOOK_URL,
-        json=payload,
-        timeout=10
+    data = {
+        "channel": channel,
+        "text": message,
+        "unfurl_links": False
+    }
+
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(data).encode("utf-8"),
+        headers=headers
     )
 
-    response.raise_for_status()
+    with urllib.request.urlopen(req) as response:
+        result = json.loads(response.read().decode("utf-8"))
+        return result.get("ok")
+
+def send_harvest_reminder():
+    if not SLACK_BOT_TOKEN:
+        raise ValueError("Missing SLACK_BOT_TOKEN env variable")
+
+    message = (
+        "Hey team 👋\n"
+        "Payroll countdown has started ⏳\n\n"
+        "Quick check:\n"
+        "• Harvest time updated with clear task details 📝\n"
+        "• Invoices prepared and ready to submit 💸\n\n"
+        "Do this now, future you will be grateful 😄"
+    )
+
+    if post_to_slack(message):
+        print("✅ Harvest reminder sent")
+    else:
+        print("❌ Failed to send harvest reminder")
 
 if __name__ == "__main__":
     send_harvest_reminder()
