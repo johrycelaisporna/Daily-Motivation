@@ -16,69 +16,46 @@ def parse_date_to_iso(date_str):
         return ""
     
     formats = [
-        '%b %d, %Y',          # Oct 19, 2026
-        '%B %d, %Y',          # October 19, 2026
-        '%m/%d/%Y',           # 10/19/2026
-        '%m/%d/%y',           # 10/19/26
-        '%Y-%m-%d',           # 2026-10-19
-        '%d/%m/%Y',           # 19/10/2026
-        '%d/%m/%y',           # 19/10/26
-        '%Y/%m/%d',           # 2026/10/19
-        '%y/%m/%d',           # 26/10/19
+        '%b %d, %Y', '%B %d, %Y', '%m/%d/%Y', '%m/%d/%y',
+        '%Y-%m-%d', '%d/%m/%Y', '%d/%m/%y', '%Y/%m/%d', '%y/%m/%d',
     ]
     
     for fmt in formats:
         try:
-            parsed_date = datetime.strptime(date_str.strip(), fmt)
-            return parsed_date.strftime('%Y-%m-%d')
+            return datetime.strptime(date_str.strip(), fmt).strftime('%Y-%m-%d')
         except ValueError:
             continue
-    
     return ""
 
 def query_monday(query):
-    """Query Monday.com API"""
     url = "https://api.monday.com/v2"
     headers = {
         "Authorization": MONDAY_API_TOKEN,
         "Content-Type": "application/json"
     }
     data = json.dumps({"query": query}).encode('utf-8')
-    
     req = urllib.request.Request(url, data=data, headers=headers)
     with urllib.request.urlopen(req) as response:
         return json.loads(response.read().decode('utf-8'))
 
 def post_to_slack(message, channel=SLACK_CHANNEL):
-    """Post message to Slack"""
     url = "https://slack.com/api/chat.postMessage"
     headers = {
         "Authorization": f"Bearer {SLACK_BOT_TOKEN}",
         "Content-Type": "application/json"
     }
-    data = {
-        "channel": channel,
-        "text": message,
-        "unfurl_links": False
-    }
-    
+    data = {"channel": channel, "text": message, "unfurl_links": False}
     req = urllib.request.Request(
-        url,
-        data=json.dumps(data).encode('utf-8'),
-        headers=headers
+        url, data=json.dumps(data).encode('utf-8'), headers=headers
     )
-    
     with urllib.request.urlopen(req) as response:
         result = json.loads(response.read().decode('utf-8'))
         return result.get("ok")
 
 def calculate_contract_end_date(start_date_str, duration_months):
-    """Calculate contract end date from start date + duration in months"""
     if not start_date_str or not duration_months:
         return ""
-    
     try:
-        # Parse start date
         start_date = None
         for fmt in ['%Y-%m-%d', '%b %d, %Y', '%B %d, %Y', '%m/%d/%Y', '%m/%d/%y']:
             try:
@@ -86,35 +63,27 @@ def calculate_contract_end_date(start_date_str, duration_months):
                 break
             except ValueError:
                 continue
-        
         if not start_date:
             return ""
         
-        # Add duration in months
         month = start_date.month + int(duration_months)
         year = start_date.year
-        
-        # Handle month overflow
         while month > 12:
             month -= 12
             year += 1
         
-        # Create end date (same day of month, or last day if not valid)
         day = start_date.day
         while day > 0:
             try:
-                end_date = datetime(year, month, day)
-                return end_date.strftime('%Y-%m-%d')
+                return datetime(year, month, day).strftime('%Y-%m-%d')
             except ValueError:
-                day -= 1  # Try previous day if invalid (e.g., Feb 31)
-        
+                day -= 1
         return ""
     except Exception as e:
         print(f"Error calculating contract end date: {e}")
         return ""
 
 def get_employees_with_contracts():
-    """Get all employees and calculate contract end dates"""
     print("📋 Fetching employees from Monday.com...")
     
     query = f'''
@@ -141,40 +110,22 @@ def get_employees_with_contracts():
     result = query_monday(query)
     employees = []
     
-    print(f"API Response keys: {result.keys()}")
-    
     if 'errors' in result:
         print(f"❌ API ERRORS:")
         for error in result['errors']:
             print(f"   - {error}")
-        print(f"\nFull error response: {json.dumps(result, indent=2)}")
         return []
-    
-    print(f"Has 'data'? {result.get('data') is not None}")
-    
-    if result.get('data'):
-        print(f"Data keys: {result['data'].keys()}")
-        print(f"Has 'boards'? {result['data'].get('boards') is not None}")
-        
-        if result['data'].get('boards'):
-            print(f"Number of boards: {len(result['data']['boards'])}")
-            if len(result['data']['boards']) > 0:
-                print(f"Board keys: {result['data']['boards'][0].keys()}")
-                print(f"Number of groups: {len(result['data']['boards'][0].get('groups', []))}")
     
     if result.get('data') and result['data'].get('boards'):
         groups = result['data']['boards'][0]['groups']
         
         for group in groups:
             group_title = group.get('title', '')
-            
-            # Only process "Active Employees" group (not Non Billable)
             if group_title != 'Active Employees':
                 print(f"  Skipping group: {group_title}")
                 continue
             
             items = group['items_page']['items']
-            
             print(f"  Checking group: {group_title} ({len(items)} items)")
             
             for item in items:
@@ -185,47 +136,25 @@ def get_employees_with_contracts():
                 duration_months = ""
                 contract_status = ""
                 
-                if name:
-                    print(f"\n    Processing: {name}")
-                
                 for col in item['column_values']:
                     col_id = col.get('id', '')
                     col_text = (col.get('text') or '').strip()
-                    col_value = col.get('value') or ''
                     
-                    # Debug: Print all columns for first employee
-                    if name and col_text:
-                        print(f"      [{col_id}]: {col_text}")
-                    
-                    # Get position
                     if col_id == 'position':
                         position = col_text
-                    
-                    # Get project
                     elif col_id == 'project':
                         project = col_text
-                    
-                    # Get start date (Adaca Start Date or Contract Start Date)
                     elif col_id in ['start_date___', 'date_mkkgvb4z']:
                         if col_text:
                             start_date = col_text
-                            print(f"      >>> Found start date: {start_date}")
-                    
-                    # Get contract duration (in months)
                     elif col_id == 'numbers_mkm2917g':
                         duration_months = col_text
-                        print(f"      >>> Found duration: {duration_months} months")
-                    
-                    # Get contract status
                     elif col_id == 'status_mkn52y8w':
                         contract_status = col_text
                 
-                # Calculate contract end date from start date + duration
                 if name and start_date and duration_months:
                     contract_end_date = calculate_contract_end_date(start_date, duration_months)
-                    
                     if contract_end_date:
-                        print(f"    ✓ {name}: {start_date} + {duration_months} months = {contract_end_date}")
                         employees.append({
                             'name': name,
                             'position': position,
@@ -233,78 +162,51 @@ def get_employees_with_contracts():
                             'contract_end_date': contract_end_date,
                             'contract_status': contract_status
                         })
-                    else:
-                        print(f"    ✗ {name}: Could not calculate end date")
-                elif name:
-                    print(f"    ✗ {name}: Missing start_date={start_date}, duration={duration_months}")
     
     print(f"✅ Found {len(employees)} employees with contract dates")
     return employees
 
 def check_contract_expirations():
-    """Check for contracts expiring in 30, 60 days, or already expired"""
     print("⏰ Checking contract expirations...")
     
-    # Get today's date in Manila timezone
     manila_tz = timezone(timedelta(hours=8))
     today = datetime.now(manila_tz).replace(hour=0, minute=0, second=0, microsecond=0)
     
-    # Calculate future dates
-    days_30 = today + timedelta(days=30)
-    days_60 = today + timedelta(days=60)
-    
     print(f"Today: {today.strftime('%Y-%m-%d')}")
-    print(f"30 days: {days_30.strftime('%Y-%m-%d')}")
-    print(f"60 days: {days_60.strftime('%Y-%m-%d')}")
     
-    # Get all employees
     employees = get_employees_with_contracts()
     
-    # Categorize by expiration timeframe - ONLY 30 and 60 days + expired
-    expiring_30 = []
-    expiring_60 = []
+    # Only two categories: expired and expiring within 30 days
     expired = []
+    expiring_30 = []
     
     for emp in employees:
         try:
             contract_date = datetime.strptime(emp['contract_end_date'], '%Y-%m-%d')
             contract_date = contract_date.replace(tzinfo=manila_tz)
             days_until = (contract_date - today).days
-            
             emp['days_until'] = days_until
             
-            # Only include expired and contracts expiring within 60 days
             if days_until < 0:
                 expired.append(emp)
             elif days_until <= 30:
                 expiring_30.append(emp)
-            elif days_until <= 60:
-                expiring_60.append(emp)
-                
         except ValueError:
             continue
     
-    # Build and post alert message - GROUPED BY PROJECT
-    if expired or expiring_30 or expiring_60:
+    if expired or expiring_30:
         message = "🚦 *CONTRACT EXPIRATION ALERTS* 🚦\n"
-        message += "_Showing contracts requiring immediate attention (60 days or less)_\n\n"
+        message += "_Showing expired contracts and those expiring within 30 days_\n\n"
         
-        # Combine all lists with their traffic light status
+        # Tag all alerts
         all_alerts = []
         for emp in expired:
-            emp['alert_type'] = 'expired'
             emp['emoji'] = '⚫'
             emp['label'] = 'EXPIRED - NEEDS RENEWAL'
             all_alerts.append(emp)
         for emp in expiring_30:
-            emp['alert_type'] = 'red'
             emp['emoji'] = '🔴'
-            emp['label'] = 'RED ALERT - 30 DAYS'
-            all_alerts.append(emp)
-        for emp in expiring_60:
-            emp['alert_type'] = 'orange'
-            emp['emoji'] = '🟠'
-            emp['label'] = 'ORANGE ALERT - 60 DAYS'
+            emp['label'] = 'EXPIRING WITHIN 30 DAYS'
             all_alerts.append(emp)
         
         # Group by project
@@ -315,11 +217,9 @@ def check_contract_expirations():
                 projects[project] = []
             projects[project].append(emp)
         
-        # Sort projects alphabetically
         for project in sorted(projects.keys()):
             message += f"📁 *{project}*\n"
             
-            # Sort employees within project by days_until (most urgent first)
             for emp in sorted(projects[project], key=lambda x: x['days_until']):
                 message += f"{emp['emoji']} {emp['name']} - {emp['position']}\n"
                 message += f"   Contract End Date: {emp['contract_end_date']} ({emp['label']})\n"
@@ -328,25 +228,22 @@ def check_contract_expirations():
                 else:
                     message += f"   Expired {abs(emp['days_until'])} days ago\n"
                 message += f"   Status: {emp['contract_status']}\n\n"
-            
             message += "\n"
         
         message += "━━━━━━━━━━━━━━━━━━━━━\n"
         message += f"📊 *Summary*\n"
         message += f"⚫ Expired: {len(expired)}\n"
-        message += f"🔴 Red (≤30 days): {len(expiring_30)}\n"
-        message += f"🟠 Orange (31-60 days): {len(expiring_60)}\n"
+        message += f"🔴 Expiring within 30 days: {len(expiring_30)}\n"
         message += f"📋 Total contracts requiring action: {len(all_alerts)}\n"
         message += "━━━━━━━━━━━━━━━━━━━━━\n"
         message += "💼 Please review and take necessary action for contract renewals."
         
-        # Post to Slack
         if post_to_slack(message):
             print("✅ Contract expiration alerts posted to Slack!")
         else:
             print("❌ Failed to post to Slack")
     else:
-        print("ℹ️ No contracts requiring immediate attention (all contracts are more than 60 days away)")
+        print("ℹ️ No contracts expiring within 30 days or expired — all clear!")
 
 if __name__ == "__main__":
     check_contract_expirations()
