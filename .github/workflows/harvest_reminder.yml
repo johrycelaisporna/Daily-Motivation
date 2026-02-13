@@ -1,23 +1,32 @@
-name: Harvest Reminder Bot
+# .github/workflows/harvest-reminder.yml
+name: Harvest & Payroll Reminder Bot
 
 on:
   schedule:
-    - cron: "0 5 10 * *"
-    - cron: "0 5 25 * *"
+    # Runs daily at 9:00 AM Philippine Time (1:00 AM UTC)
+    # The Python script decides whether to send a message based on the date
+    - cron: "0 1 * * *"
+
+  # Manual trigger for testing
   workflow_dispatch:
 
 jobs:
-  run-bot:
+  send-reminder:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
-      - name: Run Harvest Reminder Bot
+      - name: Set timezone to Philippine Time
+        run: echo "TZ=Asia/Manila" >> $GITHUB_ENV
+
+      - name: Run reminder bot
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-        run: python harvest_reminder_bot.py
+        run: python harvest_reminder.py
