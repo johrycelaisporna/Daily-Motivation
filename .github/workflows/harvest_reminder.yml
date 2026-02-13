@@ -29,4 +29,4 @@ jobs:
       - name: Run reminder bot
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-        run: python harvest_reminder.py
+        run: python harvest_reminder_bot.py
