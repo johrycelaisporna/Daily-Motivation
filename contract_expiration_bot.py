@@ -1,8 +1,8 @@
 import os
 import json
 import urllib.request
-import urllib.parse
 from datetime import datetime, timezone, timedelta
+from math import floor
 
 # Configuration
 MONDAY_API_TOKEN = os.environ.get('MONDAY_API_TOKEN')
@@ -19,7 +19,6 @@ def parse_date(date_str):
         '%m/%d/%Y', '%m/%d/%y', '%d/%m/%Y',
         '%d/%m/%y', '%Y/%m/%d', '%y/%m/%d',
     ]
-    # Strip timestamp if present (e.g. "2025-05-04T00:00:00")
     date_str = date_str.strip().split('T')[0]
     for fmt in formats:
         try:
@@ -54,6 +53,7 @@ def post_to_slack(message, channel=SLACK_CHANNEL):
         return result.get("ok")
 
 def calculate_contract_end_date(start_date_str, duration_months):
+    """Calculate end date from start date + duration in months (supports decimals)."""
     if not start_date_str or not duration_months:
         return ""
     try:
@@ -61,11 +61,18 @@ def calculate_contract_end_date(start_date_str, duration_months):
         if not start_date_str:
             return ""
         start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
-        month = start_date.month + int(duration_months)
+
+        # FIX: support decimals like 12.17, 3.05, .95 by rounding to nearest month
+        months = floor(float(duration_months) + 0.5)
+        if months <= 0:
+            months = 1
+
+        month = start_date.month + months
         year = start_date.year
         while month > 12:
             month -= 12
             year += 1
+
         day = start_date.day
         while day > 0:
             try:
@@ -74,21 +81,16 @@ def calculate_contract_end_date(start_date_str, duration_months):
                 day -= 1
         return ""
     except Exception as e:
-        print(f"Error calculating contract end date: {e}")
+        print(f"  ❌ Error calculating end date for start={start_date_str}, duration={duration_months}: {e}")
         return ""
 
 def extract_date_from_column(col):
-    """
-    Try to get a date from a Monday column.
-    First tries col['text'], then falls back to parsing col['value'] JSON.
-    """
+    """Get date from a Monday column — tries text first, then raw JSON value."""
     col_text = (col.get('text') or '').strip()
     if col_text:
         parsed = parse_date(col_text)
         if parsed:
             return parsed
-
-    # Fallback: parse the raw JSON value field
     raw_value = col.get('value') or ''
     if raw_value:
         try:
@@ -98,7 +100,6 @@ def extract_date_from_column(col):
                 return parse_date(date_from_value)
         except (json.JSONDecodeError, AttributeError):
             pass
-
     return ""
 
 def get_employees_with_contracts():
@@ -150,13 +151,10 @@ def get_employees_with_contracts():
                 name = item.get('name', '').strip()
                 position = ""
                 project = ""
-                start_date = ""
+                sow_start_date = ""    # date_mkkgvb4z — SOW/contract start date
+                emp_start_date = ""    # start_date___ — employee start date
                 duration_months = ""
                 contract_status = ""
-
-                # Debug: print all column IDs and values to help identify unknowns
-                # Uncomment the line below during troubleshooting:
-                print(f"  [{name}] columns: { {c['id']: c['text'] for c in item['column_values']} }")
 
                 for col in item['column_values']:
                     col_id = col.get('id', '')
@@ -166,18 +164,21 @@ def get_employees_with_contracts():
                         position = col_text
                     elif col_id == 'project':
                         project = col_text
-                    elif col_id in ['start_date___', 'date_mkkgvb4z']:
-                        # FIX: use extract_date_from_column to handle empty text + JSON fallback
-                        extracted = extract_date_from_column(col)
-                        if extracted:
-                            start_date = extracted
+                    elif col_id == 'start_date___':
+                        emp_start_date = extract_date_from_column(col)
+                    elif col_id == 'date_mkkgvb4z':
+                        # FIX: This is the SOW start date — use as primary base for end date calculation
+                        sow_start_date = extract_date_from_column(col)
                     elif col_id == 'numbers_mkm2917g':
                         duration_months = col_text
                     elif col_id == 'status_mkn52y8w':
                         contract_status = col_text
 
-                if name and start_date and duration_months:
-                    contract_end_date = calculate_contract_end_date(start_date, duration_months)
+                # FIX: Prefer SOW start date for contract calculation, fall back to employee start date
+                best_start_date = sow_start_date or emp_start_date
+
+                if name and best_start_date and duration_months:
+                    contract_end_date = calculate_contract_end_date(best_start_date, duration_months)
                     if contract_end_date:
                         employees.append({
                             'name': name,
@@ -186,10 +187,11 @@ def get_employees_with_contracts():
                             'contract_end_date': contract_end_date,
                             'contract_status': contract_status
                         })
+                    else:
+                        print(f"  ⚠️  Could not calculate end date for '{name}' — start={best_start_date}, duration={duration_months}")
                 else:
-                    # FIX: log skipped employees so you can see exactly who's being missed
                     if name:
-                        print(f"  ⚠️  Skipping '{name}' — start_date={repr(start_date)}, duration={repr(duration_months)}")
+                        print(f"  ⚠️  Skipping '{name}' — sow_start={repr(sow_start_date)}, emp_start={repr(emp_start_date)}, duration={repr(duration_months)}")
 
     print(f"✅ Found {len(employees)} employees with contract dates")
     return employees
