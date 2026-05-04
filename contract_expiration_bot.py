@@ -156,7 +156,7 @@ def get_employees_with_contracts():
 
                 # Debug: print all column IDs and values to help identify unknowns
                 # Uncomment the line below during troubleshooting:
-                # print(f"  [{name}] columns: { {c['id']: c['text'] for c in item['column_values']} }")
+                print(f"  [{name}] columns: { {c['id']: c['text'] for c in item['column_values']} }")
 
                 for col in item['column_values']:
                     col_id = col.get('id', '')
