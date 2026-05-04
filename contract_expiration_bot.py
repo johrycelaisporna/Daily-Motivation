@@ -10,19 +10,20 @@ SLACK_BOT_TOKEN = os.environ.get('SLACK_BOT_TOKEN')
 BOARD_ID = "6329303796"
 SLACK_CHANNEL = "contract-renewals"
 
-def parse_date_to_iso(date_str):
+def parse_date(date_str):
     """Convert various date formats to YYYY-MM-DD"""
     if not date_str:
         return ""
-    
     formats = [
-        '%b %d, %Y', '%B %d, %Y', '%m/%d/%Y', '%m/%d/%y',
-        '%Y-%m-%d', '%d/%m/%Y', '%d/%m/%y', '%Y/%m/%d', '%y/%m/%d',
+        '%Y-%m-%d', '%b %d, %Y', '%B %d, %Y',
+        '%m/%d/%Y', '%m/%d/%y', '%d/%m/%Y',
+        '%d/%m/%y', '%Y/%m/%d', '%y/%m/%d',
     ]
-    
+    # Strip timestamp if present (e.g. "2025-05-04T00:00:00")
+    date_str = date_str.strip().split('T')[0]
     for fmt in formats:
         try:
-            return datetime.strptime(date_str.strip(), fmt).strftime('%Y-%m-%d')
+            return datetime.strptime(date_str, fmt).strftime('%Y-%m-%d')
         except ValueError:
             continue
     return ""
@@ -56,22 +57,15 @@ def calculate_contract_end_date(start_date_str, duration_months):
     if not start_date_str or not duration_months:
         return ""
     try:
-        start_date = None
-        for fmt in ['%Y-%m-%d', '%b %d, %Y', '%B %d, %Y', '%m/%d/%Y', '%m/%d/%y']:
-            try:
-                start_date = datetime.strptime(start_date_str.strip(), fmt)
-                break
-            except ValueError:
-                continue
-        if not start_date:
+        start_date_str = parse_date(start_date_str)
+        if not start_date_str:
             return ""
-        
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
         month = start_date.month + int(duration_months)
         year = start_date.year
         while month > 12:
             month -= 12
             year += 1
-        
         day = start_date.day
         while day > 0:
             try:
@@ -83,9 +77,33 @@ def calculate_contract_end_date(start_date_str, duration_months):
         print(f"Error calculating contract end date: {e}")
         return ""
 
+def extract_date_from_column(col):
+    """
+    Try to get a date from a Monday column.
+    First tries col['text'], then falls back to parsing col['value'] JSON.
+    """
+    col_text = (col.get('text') or '').strip()
+    if col_text:
+        parsed = parse_date(col_text)
+        if parsed:
+            return parsed
+
+    # Fallback: parse the raw JSON value field
+    raw_value = col.get('value') or ''
+    if raw_value:
+        try:
+            parsed_value = json.loads(raw_value)
+            date_from_value = parsed_value.get('date', '')
+            if date_from_value:
+                return parse_date(date_from_value)
+        except (json.JSONDecodeError, AttributeError):
+            pass
+
+    return ""
+
 def get_employees_with_contracts():
     print("📋 Fetching employees from Monday.com...")
-    
+
     query = f'''
     {{
       boards(ids: {BOARD_ID}) {{
@@ -106,28 +124,28 @@ def get_employees_with_contracts():
       }}
     }}
     '''
-    
+
     result = query_monday(query)
     employees = []
-    
+
     if 'errors' in result:
         print(f"❌ API ERRORS:")
         for error in result['errors']:
             print(f"   - {error}")
         return []
-    
+
     if result.get('data') and result['data'].get('boards'):
         groups = result['data']['boards'][0]['groups']
-        
+
         for group in groups:
             group_title = group.get('title', '')
             if group_title != 'Active Employees':
                 print(f"  Skipping group: {group_title}")
                 continue
-            
+
             items = group['items_page']['items']
             print(f"  Checking group: {group_title} ({len(items)} items)")
-            
+
             for item in items:
                 name = item.get('name', '').strip()
                 position = ""
@@ -135,23 +153,29 @@ def get_employees_with_contracts():
                 start_date = ""
                 duration_months = ""
                 contract_status = ""
-                
+
+                # Debug: print all column IDs and values to help identify unknowns
+                # Uncomment the line below during troubleshooting:
+                # print(f"  [{name}] columns: { {c['id']: c['text'] for c in item['column_values']} }")
+
                 for col in item['column_values']:
                     col_id = col.get('id', '')
                     col_text = (col.get('text') or '').strip()
-                    
+
                     if col_id == 'position':
                         position = col_text
                     elif col_id == 'project':
                         project = col_text
                     elif col_id in ['start_date___', 'date_mkkgvb4z']:
-                        if col_text:
-                            start_date = col_text
+                        # FIX: use extract_date_from_column to handle empty text + JSON fallback
+                        extracted = extract_date_from_column(col)
+                        if extracted:
+                            start_date = extracted
                     elif col_id == 'numbers_mkm2917g':
                         duration_months = col_text
                     elif col_id == 'status_mkn52y8w':
                         contract_status = col_text
-                
+
                 if name and start_date and duration_months:
                     contract_end_date = calculate_contract_end_date(start_date, duration_months)
                     if contract_end_date:
@@ -162,43 +186,44 @@ def get_employees_with_contracts():
                             'contract_end_date': contract_end_date,
                             'contract_status': contract_status
                         })
-    
+                else:
+                    # FIX: log skipped employees so you can see exactly who's being missed
+                    if name:
+                        print(f"  ⚠️  Skipping '{name}' — start_date={repr(start_date)}, duration={repr(duration_months)}")
+
     print(f"✅ Found {len(employees)} employees with contract dates")
     return employees
 
 def check_contract_expirations():
     print("⏰ Checking contract expirations...")
-    
+
     manila_tz = timezone(timedelta(hours=8))
     today = datetime.now(manila_tz).replace(hour=0, minute=0, second=0, microsecond=0)
-    
     print(f"Today: {today.strftime('%Y-%m-%d')}")
-    
+
     employees = get_employees_with_contracts()
-    
-    # Only two categories: expired and expiring within 30 days
+
     expired = []
     expiring_30 = []
-    
+
     for emp in employees:
         try:
             contract_date = datetime.strptime(emp['contract_end_date'], '%Y-%m-%d')
             contract_date = contract_date.replace(tzinfo=manila_tz)
             days_until = (contract_date - today).days
             emp['days_until'] = days_until
-            
+
             if days_until < 0:
                 expired.append(emp)
             elif days_until <= 30:
                 expiring_30.append(emp)
         except ValueError:
             continue
-    
+
     if expired or expiring_30:
         message = "🚦 *CONTRACT EXPIRATION ALERTS* 🚦\n"
         message += "_Showing expired contracts and those expiring within 30 days_\n\n"
-        
-        # Tag all alerts
+
         all_alerts = []
         for emp in expired:
             emp['emoji'] = '⚫'
@@ -208,18 +233,16 @@ def check_contract_expirations():
             emp['emoji'] = '🔴'
             emp['label'] = 'EXPIRING WITHIN 30 DAYS'
             all_alerts.append(emp)
-        
-        # Group by project
+
         projects = {}
         for emp in all_alerts:
             project = emp['project'] or 'No Project'
             if project not in projects:
                 projects[project] = []
             projects[project].append(emp)
-        
+
         for project in sorted(projects.keys()):
             message += f"📁 *{project}*\n"
-            
             for emp in sorted(projects[project], key=lambda x: x['days_until']):
                 message += f"{emp['emoji']} {emp['name']} - {emp['position']}\n"
                 message += f"   Contract End Date: {emp['contract_end_date']} ({emp['label']})\n"
@@ -229,7 +252,7 @@ def check_contract_expirations():
                     message += f"   Expired {abs(emp['days_until'])} days ago\n"
                 message += f"   Status: {emp['contract_status']}\n\n"
             message += "\n"
-        
+
         message += "━━━━━━━━━━━━━━━━━━━━━\n"
         message += f"📊 *Summary*\n"
         message += f"⚫ Expired: {len(expired)}\n"
@@ -237,7 +260,7 @@ def check_contract_expirations():
         message += f"📋 Total contracts requiring action: {len(all_alerts)}\n"
         message += "━━━━━━━━━━━━━━━━━━━━━\n"
         message += "💼 Please review and take necessary action for contract renewals."
-        
+
         if post_to_slack(message):
             print("✅ Contract expiration alerts posted to Slack!")
         else:
