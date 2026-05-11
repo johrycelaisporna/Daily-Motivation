@@ -10,6 +10,13 @@ SLACK_BOT_TOKEN = os.environ.get('SLACK_BOT_TOKEN')
 BOARD_ID = "6329303796"
 SLACK_CHANNEL = "contract-renewals"
 
+ACTIVE_GROUPS = [
+    'Active Employees',
+    'Active Fractionalised Resources',
+    'Active Billable Employees',
+    'Active Billable Engineers',
+]
+
 def parse_date(date_str):
     """Convert various date formats to YYYY-MM-DD"""
     if not date_str:
@@ -62,7 +69,6 @@ def calculate_contract_end_date(start_date_str, duration_months):
             return ""
         start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
 
-        # FIX: support decimals like 12.17, 3.05, .95 by rounding to nearest month
         months = floor(float(duration_months) + 0.5)
         if months <= 0:
             months = 1
@@ -140,7 +146,8 @@ def get_employees_with_contracts():
 
         for group in groups:
             group_title = group.get('title', '')
-            if group_title != 'Active Employees':
+
+            if group_title not in ACTIVE_GROUPS:
                 print(f"  Skipping group: {group_title}")
                 continue
 
@@ -151,8 +158,8 @@ def get_employees_with_contracts():
                 name = item.get('name', '').strip()
                 position = ""
                 project = ""
-                sow_start_date = ""    # date_mkkgvb4z — SOW/contract start date
-                emp_start_date = ""    # start_date___ — employee start date
+                sow_start_date = ""
+                emp_start_date = ""
                 duration_months = ""
                 contract_status = ""
 
@@ -167,14 +174,12 @@ def get_employees_with_contracts():
                     elif col_id == 'start_date___':
                         emp_start_date = extract_date_from_column(col)
                     elif col_id == 'date_mkkgvb4z':
-                        # FIX: This is the SOW start date — use as primary base for end date calculation
                         sow_start_date = extract_date_from_column(col)
                     elif col_id == 'numbers_mkm2917g':
                         duration_months = col_text
                     elif col_id == 'status_mkn52y8w':
                         contract_status = col_text
 
-                # FIX: Prefer SOW start date for contract calculation, fall back to employee start date
                 best_start_date = sow_start_date or emp_start_date
 
                 if name and best_start_date and duration_months:
