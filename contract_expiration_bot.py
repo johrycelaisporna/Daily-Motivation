@@ -162,6 +162,7 @@ def get_employees_with_contracts():
                 emp_start_date = ""
                 duration_months = ""
                 contract_status = ""
+                new_contract_end_date = ""
 
                 for col in item['column_values']:
                     col_id = col.get('id', '')
@@ -179,24 +180,33 @@ def get_employees_with_contracts():
                         duration_months = col_text
                     elif col_id == 'status_mkn52y8w':
                         contract_status = col_text
+                    elif col_id == 'date_mm4ww2jv':
+                        # New Contract End Date — supersedes calculated end date when present
+                        new_contract_end_date = extract_date_from_column(col)
 
                 best_start_date = sow_start_date or emp_start_date
 
-                if name and best_start_date and duration_months:
-                    contract_end_date = calculate_contract_end_date(best_start_date, duration_months)
-                    if contract_end_date:
-                        employees.append({
-                            'name': name,
-                            'position': position,
-                            'project': project,
-                            'contract_end_date': contract_end_date,
-                            'contract_status': contract_status
-                        })
-                    else:
-                        print(f"  ⚠️  Could not calculate end date for '{name}' — start={best_start_date}, duration={duration_months}")
+                calculated_end_date = ""
+                if best_start_date and duration_months:
+                    calculated_end_date = calculate_contract_end_date(best_start_date, duration_months)
+
+                # New Contract End Date takes precedence over the calculated one
+                final_end_date = new_contract_end_date or calculated_end_date
+                end_date_source = "New Contract End Date" if new_contract_end_date else "Calculated (Start + Duration)"
+
+                if name and final_end_date:
+                    employees.append({
+                        'name': name,
+                        'position': position,
+                        'project': project,
+                        'contract_end_date': final_end_date,
+                        'contract_status': contract_status,
+                        'end_date_source': end_date_source,
+                    })
                 else:
                     if name:
-                        print(f"  ⚠️  Skipping '{name}' — sow_start={repr(sow_start_date)}, emp_start={repr(emp_start_date)}, duration={repr(duration_months)}")
+                        print(f"  ⚠️  Skipping '{name}' — new_contract_end={repr(new_contract_end_date)}, "
+                              f"sow_start={repr(sow_start_date)}, emp_start={repr(emp_start_date)}, duration={repr(duration_months)}")
 
     print(f"✅ Found {len(employees)} employees with contract dates")
     return employees
@@ -253,6 +263,7 @@ def check_contract_expirations():
             for emp in sorted(projects[project], key=lambda x: x['days_until']):
                 message += f"{emp['emoji']} {emp['name']} - {emp['position']}\n"
                 message += f"   Contract End Date: {emp['contract_end_date']} ({emp['label']})\n"
+                message += f"   Source: {emp['end_date_source']}\n"
                 if emp['days_until'] >= 0:
                     message += f"   Days remaining: {emp['days_until']}\n"
                 else:
