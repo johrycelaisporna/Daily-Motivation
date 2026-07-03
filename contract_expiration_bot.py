@@ -2,7 +2,6 @@ import os
 import json
 import urllib.request
 from datetime import datetime, timezone, timedelta
-from math import floor
 
 # Configuration
 MONDAY_API_TOKEN = os.environ.get('MONDAY_API_TOKEN')
@@ -59,37 +58,6 @@ def post_to_slack(message, channel=SLACK_CHANNEL):
         result = json.loads(response.read().decode('utf-8'))
         return result.get("ok")
 
-def calculate_contract_end_date(start_date_str, duration_months):
-    """Calculate end date from start date + duration in months (supports decimals)."""
-    if not start_date_str or not duration_months:
-        return ""
-    try:
-        start_date_str = parse_date(start_date_str)
-        if not start_date_str:
-            return ""
-        start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
-
-        months = floor(float(duration_months) + 0.5)
-        if months <= 0:
-            months = 1
-
-        month = start_date.month + months
-        year = start_date.year
-        while month > 12:
-            month -= 12
-            year += 1
-
-        day = start_date.day
-        while day > 0:
-            try:
-                return datetime(year, month, day).strftime('%Y-%m-%d')
-            except ValueError:
-                day -= 1
-        return ""
-    except Exception as e:
-        print(f"  ❌ Error calculating end date for start={start_date_str}, duration={duration_months}: {e}")
-        return ""
-
 def extract_date_from_column(col):
     """Get date from a Monday column — tries text first, then raw JSON value."""
     col_text = (col.get('text') or '').strip()
@@ -108,7 +76,7 @@ def extract_date_from_column(col):
             pass
     return ""
 
-def get_employees_with_contracts():
+def get_employees_with_new_contract_end_date():
     print("📋 Fetching employees from Monday.com...")
 
     query = f'''
@@ -158,9 +126,6 @@ def get_employees_with_contracts():
                 name = item.get('name', '').strip()
                 position = ""
                 project = ""
-                sow_start_date = ""
-                emp_start_date = ""
-                duration_months = ""
                 contract_status = ""
                 new_contract_end_date = ""
 
@@ -172,53 +137,34 @@ def get_employees_with_contracts():
                         position = col_text
                     elif col_id == 'project':
                         project = col_text
-                    elif col_id == 'start_date___':
-                        emp_start_date = extract_date_from_column(col)
-                    elif col_id == 'date_mkkgvb4z':
-                        sow_start_date = extract_date_from_column(col)
-                    elif col_id == 'numbers_mkm2917g':
-                        duration_months = col_text
                     elif col_id == 'status_mkn52y8w':
                         contract_status = col_text
                     elif col_id == 'date_mm4ww2jv':
-                        # New Contract End Date — supersedes calculated end date when present
                         new_contract_end_date = extract_date_from_column(col)
 
-                best_start_date = sow_start_date or emp_start_date
-
-                calculated_end_date = ""
-                if best_start_date and duration_months:
-                    calculated_end_date = calculate_contract_end_date(best_start_date, duration_months)
-
-                # New Contract End Date takes precedence over the calculated one
-                final_end_date = new_contract_end_date or calculated_end_date
-                end_date_source = "New Contract End Date" if new_contract_end_date else "Calculated (Start + Duration)"
-
-                if name and final_end_date:
+                if name and new_contract_end_date:
                     employees.append({
                         'name': name,
                         'position': position,
                         'project': project,
-                        'contract_end_date': final_end_date,
+                        'contract_end_date': new_contract_end_date,
                         'contract_status': contract_status,
-                        'end_date_source': end_date_source,
                     })
                 else:
                     if name:
-                        print(f"  ⚠️  Skipping '{name}' — new_contract_end={repr(new_contract_end_date)}, "
-                              f"sow_start={repr(sow_start_date)}, emp_start={repr(emp_start_date)}, duration={repr(duration_months)}")
+                        print(f"  ⚠️  Skipping '{name}' — no New Contract End Date set")
 
-    print(f"✅ Found {len(employees)} employees with contract dates")
+    print(f"✅ Found {len(employees)} employees with a New Contract End Date")
     return employees
 
 def check_contract_expirations():
-    print("⏰ Checking contract expirations...")
+    print("⏰ Checking contract expirations (New Contract End Date only)...")
 
     manila_tz = timezone(timedelta(hours=8))
     today = datetime.now(manila_tz).replace(hour=0, minute=0, second=0, microsecond=0)
     print(f"Today: {today.strftime('%Y-%m-%d')}")
 
-    employees = get_employees_with_contracts()
+    employees = get_employees_with_new_contract_end_date()
 
     expired = []
     expiring_30 = []
@@ -238,7 +184,7 @@ def check_contract_expirations():
             continue
 
     if expired or expiring_30:
-        message = "🚦 *CONTRACT EXPIRATION ALERTS* 🚦\n"
+        message = "🚦 *CONTRACT EXPIRATION ALERTS (New Contract End Date)* 🚦\n"
         message += "_Showing expired contracts and those expiring within 30 days_\n\n"
 
         all_alerts = []
@@ -262,8 +208,7 @@ def check_contract_expirations():
             message += f"📁 *{project}*\n"
             for emp in sorted(projects[project], key=lambda x: x['days_until']):
                 message += f"{emp['emoji']} {emp['name']} - {emp['position']}\n"
-                message += f"   Contract End Date: {emp['contract_end_date']} ({emp['label']})\n"
-                message += f"   Source: {emp['end_date_source']}\n"
+                message += f"   New Contract End Date: {emp['contract_end_date']} ({emp['label']})\n"
                 if emp['days_until'] >= 0:
                     message += f"   Days remaining: {emp['days_until']}\n"
                 else:
