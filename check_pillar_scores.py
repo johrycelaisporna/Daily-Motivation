@@ -154,11 +154,17 @@ def main() -> None:
     print(f"Checked {len(items)} item(s) on board {BOARD_ID}")
 
     for item in items:
+        # DEBUG: show exactly what the API returned for this item's columns
+        print(f"  DEBUG [{item['name']}] raw column_values: {item['column_values']}")
+
         needed = set(compute_labels(item))
         existing = current_labels(item)
 
+        print(f"  DEBUG [{item['name']}] needed={sorted(needed)} existing={sorted(existing)}")
+
         if needed == existing:
-            continue  # already correct, don't waste an API call
+            print(f"  [{item['name']}] no change needed")
+            continue
 
         update_coaching_areas(item["id"], sorted(needed), token)
         print(
