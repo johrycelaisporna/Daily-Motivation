@@ -312,14 +312,35 @@ def classify(score: float) -> str:
     return "Performance Improvement Plan"
 
 
-def post_to_slack(message: str) -> None:
-    webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
-    if not webhook_url:
-        print("  WARNING: SLACK_WEBHOOK_URL not set, skipping Slack post.")
-        return
-    resp = requests.post(webhook_url, json={"text": message}, timeout=15)
-    if resp.status_code != 200:
-        print(f"  WARNING: Slack post failed ({resp.status_code}): {resp.text}")
+SLACK_CHANNEL = "#adaca-excellence-scorecard"
+
+
+def post_to_slack(message: str) -> bool:
+    """Returns True if the message was actually sent, False otherwise.
+
+    Uses the Slack Web API (chat.postMessage) with a Bot Token, matching
+    the existing SLACK_BOT_TOKEN secret already set up for other bots --
+    not an incoming webhook.
+    """
+    bot_token = os.environ.get("SLACK_BOT_TOKEN")
+    if not bot_token:
+        print("  WARNING: SLACK_BOT_TOKEN not set, skipping Slack post.")
+        return False
+
+    resp = requests.post(
+        "https://slack.com/api/chat.postMessage",
+        headers={
+            "Authorization": f"Bearer {bot_token}",
+            "Content-Type": "application/json; charset=utf-8",
+        },
+        json={"channel": SLACK_CHANNEL, "text": message},
+        timeout=15,
+    )
+    data = resp.json()
+    if not data.get("ok"):
+        print(f"  WARNING: Slack post failed: {data.get('error')}")
+        return False
+    return True
 
 
 def post_update(item_id: str, message: str, token: str) -> None:
@@ -404,9 +425,12 @@ def main() -> None:
                 lines.append("📋 In Coaching range — a Coaching Case has been created.")
             lines.append(f"<{source_url}|Open review>")
 
-            post_to_slack("\n".join(lines))
-            flag_scorecard_item(item["id"], COL_SLACK_NOTIFIED, token)
-            print(f"  [{item['name']}] Posted Slack summary (score {score:.2f})")
+            sent = post_to_slack("\n".join(lines))
+            if sent:
+                flag_scorecard_item(item["id"], COL_SLACK_NOTIFIED, token)
+                print(f"  [{item['name']}] Posted Slack summary (score {score:.2f})")
+            else:
+                print(f"  [{item['name']}] Slack post FAILED, will retry next run (score {score:.2f})")
 
         already_coaching = bool(values.get(COL_COACHING_CASE_CREATED))
         already_pip = bool(values.get(COL_PIP_CREATED))
