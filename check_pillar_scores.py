@@ -107,8 +107,12 @@ def fetch_items(token: str) -> list[dict]:
         COL_EMPLOYEE_NAME,
         COL_REVIEW_PERIOD,
         COL_REVIEW_DATE,
+        COL_ROLE_TYPE,
         COL_COACHING_CASE_CREATED,
         COL_PIP_CREATED,
+        COL_RECOGNITION_NOTIFIED,
+        COL_LEADERSHIP_NOTIFIED,
+        COL_SLACK_NOTIFIED,
     ]
     query = """
     query ($boardId: [ID!], $columnIds: [String!]) {
@@ -198,12 +202,18 @@ SCORECARD_URL_TEMPLATE = "https://adacahq.monday.com/boards/{board}/pulses/{item
 COL_EMPLOYEE_NAME = "text_mm52ps"
 COL_REVIEW_PERIOD = "timerange_mm52jpf9"
 COL_REVIEW_DATE = "date_mm52nh8r"
+COL_ROLE_TYPE = "color_mm52q72s"
 COL_COACHING_CASE_CREATED = "boolean_mm5364ka"
 COL_PIP_CREATED = "boolean_mm53rre1"
+COL_RECOGNITION_NOTIFIED = "boolean_mm53ctmg"
+COL_LEADERSHIP_NOTIFIED = "boolean_mm53vj1h"
+COL_SLACK_NOTIFIED = "boolean_mm53qzm0"
 
 COACHING_BOARD_ID = 18421197053
 PIP_BOARD_ID = 18421197058
 
+RECOGNITION_THRESHOLD = 5.0     # Overall Score == 5 -> Recognition
+LEADERSHIP_LOW = 4.0            # Overall Score 4.0-4.99 -> Leadership/Upskilling
 COACHING_LOW = 3.0   # Overall Score >= this and < 4.0 -> Coaching Case
 COACHING_HIGH = 4.0
 PIP_THRESHOLD = 3.0  # Overall Score < this -> PIP
@@ -237,10 +247,12 @@ def create_coaching_case(item: dict, values: dict, needed_labels: list[str], sco
     column_values = {
         "text_mm5330cv": employee,
         "text_mm53yw1r": review_period,
-        "dropdown_mm53dhkh": {"labels": needed_labels},
         "numeric_mm53jkg9": str(round(score, 2)),
         "link_mm53f1dt": {"url": source_url, "text": "Open review"},
     }
+    if needed_labels:
+        column_values["dropdown_mm53dhkh"] = {"labels": needed_labels}
+
     mutation = """
     mutation ($boardId: ID!, $itemName: String!, $columnValues: JSON!) {
       create_item(board_id: $boardId, item_name: $itemName, column_values: $columnValues, create_labels_if_missing: true) {
@@ -265,9 +277,10 @@ def create_pip(item: dict, values: dict, needed_labels: list[str], score: float,
     column_values = {
         "text_mm53f4qw": employee,
         "numeric_mm53h2we": str(round(score, 2)),
-        "dropdown_mm536yz3": {"labels": needed_labels},
         "link_mm53bgjf": {"url": source_url, "text": "Open review"},
     }
+    if needed_labels:
+        column_values["dropdown_mm536yz3"] = {"labels": needed_labels}
     if review_date:
         column_values["date_mm53whmp"] = {"date": review_date}
 
@@ -285,6 +298,42 @@ def create_pip(item: dict, values: dict, needed_labels: list[str], score: float,
     }
     run_query(mutation, variables, token)
     flag_scorecard_item(item["id"], COL_PIP_CREATED, token)
+
+
+def classify(score: float) -> str:
+    """Mirrors the Classification formula -- computed here in Python since
+    formula columns can't be read reliably via the API."""
+    if score >= 5:
+        return "Replicate"
+    if score >= 4:
+        return "Leadership / Upskilling"
+    if score >= 3:
+        return "Targeted Coaching"
+    return "Performance Improvement Plan"
+
+
+def post_to_slack(message: str) -> None:
+    webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
+    if not webhook_url:
+        print("  WARNING: SLACK_WEBHOOK_URL not set, skipping Slack post.")
+        return
+    resp = requests.post(webhook_url, json={"text": message}, timeout=15)
+    if resp.status_code != 200:
+        print(f"  WARNING: Slack post failed ({resp.status_code}): {resp.text}")
+
+
+def post_update(item_id: str, message: str, token: str) -> None:
+    """Post an Update (comment) on the scorecard item -- this notifies
+    whoever is subscribed to it (typically the Reviewer)."""
+    mutation = """
+    mutation ($itemId: ID!, $body: String!) {
+      create_update(item_id: $itemId, body: $body) {
+        id
+      }
+    }
+    """
+    variables = {"itemId": str(item_id), "body": message}
+    run_query(mutation, variables, token)
 
 
 def flag_scorecard_item(item_id: str, checkbox_col: str, token: str) -> None:
@@ -331,8 +380,46 @@ def main() -> None:
         if score is None:
             continue  # no ratings answered yet at all, nothing to classify
 
+        already_slack_notified = bool(values.get(COL_SLACK_NOTIFIED))
+        if not already_slack_notified:
+            employee = values.get(COL_EMPLOYEE_NAME) or item["name"]
+            role = values.get(COL_ROLE_TYPE) or "—"
+            classification = classify(score)
+            source_url = SCORECARD_URL_TEMPLATE.format(board=BOARD_ID, item=item["id"])
+
+            lines = [
+                f"*New performance review submitted*",
+                f"*Employee:* {employee}  |  *Role:* {role}",
+                f"*Overall Score:* {score:.2f}  |  *Classification:* {classification}",
+            ]
+            if needed:
+                lines.append(f"*Coaching Areas flagged:* {', '.join(sorted(needed))}")
+            if score >= RECOGNITION_THRESHOLD:
+                lines.append("🎉 Perfect score — candidate for Recognition.")
+            elif LEADERSHIP_LOW <= score < RECOGNITION_THRESHOLD:
+                lines.append("⭐ Candidate for Leadership / Upskilling.")
+            elif score < PIP_THRESHOLD:
+                lines.append("🚨 Below 3.0 — a PIP has been created.")
+            elif COACHING_LOW <= score < COACHING_HIGH:
+                lines.append("📋 In Coaching range — a Coaching Case has been created.")
+            lines.append(f"<{source_url}|Open review>")
+
+            post_to_slack("\n".join(lines))
+            flag_scorecard_item(item["id"], COL_SLACK_NOTIFIED, token)
+            print(f"  [{item['name']}] Posted Slack summary (score {score:.2f})")
+
         already_coaching = bool(values.get(COL_COACHING_CASE_CREATED))
         already_pip = bool(values.get(COL_PIP_CREATED))
+        already_recognized = bool(values.get(COL_RECOGNITION_NOTIFIED))
+        already_leadership = bool(values.get(COL_LEADERSHIP_NOTIFIED))
+
+        if score >= RECOGNITION_THRESHOLD and not already_recognized:
+            flag_scorecard_item(item["id"], COL_RECOGNITION_NOTIFIED, token)
+            print(f"  [{item['name']}] Flagged Recognition (score {score:.2f}) — covered in Slack post above")
+
+        elif LEADERSHIP_LOW <= score < RECOGNITION_THRESHOLD and not already_leadership:
+            flag_scorecard_item(item["id"], COL_LEADERSHIP_NOTIFIED, token)
+            print(f"  [{item['name']}] Flagged Leadership (score {score:.2f}) — covered in Slack post above")
 
         if COACHING_LOW <= score < COACHING_HIGH and not already_coaching:
             create_coaching_case(item, values, sorted(needed), score, token)
