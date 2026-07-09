@@ -102,7 +102,14 @@ def all_rating_column_ids() -> list[str]:
 
 def fetch_items(token: str) -> list[dict]:
     """Fetch all items with the raw rating values and current Coaching Areas."""
-    column_ids = all_rating_column_ids() + [COL_COACHING_AREAS]
+    column_ids = all_rating_column_ids() + [
+        COL_COACHING_AREAS,
+        COL_EMPLOYEE_NAME,
+        COL_REVIEW_PERIOD,
+        COL_REVIEW_DATE,
+        COL_COACHING_CASE_CREATED,
+        COL_PIP_CREATED,
+    ]
     query = """
     query ($boardId: [ID!], $columnIds: [String!]) {
       boards(ids: $boardId) {
@@ -186,23 +193,153 @@ def update_coaching_areas(item_id: str, labels: list[str], token: str) -> None:
     run_query(mutation, variables, token)
 
 
+SCORECARD_URL_TEMPLATE = "https://adacahq.monday.com/boards/{board}/pulses/{item}"
+
+COL_EMPLOYEE_NAME = "text_mm52ps"
+COL_REVIEW_PERIOD = "timerange_mm52jpf9"
+COL_REVIEW_DATE = "date_mm52nh8r"
+COL_COACHING_CASE_CREATED = "boolean_mm5364ka"
+COL_PIP_CREATED = "boolean_mm53rre1"
+
+COACHING_BOARD_ID = 18421197053
+PIP_BOARD_ID = 18421197058
+
+COACHING_LOW = 3.0   # Overall Score >= this and < 4.0 -> Coaching Case
+COACHING_HIGH = 4.0
+PIP_THRESHOLD = 3.0  # Overall Score < this -> PIP
+
+
+def overall_score(item: dict, values: dict) -> float | None:
+    """Average of the 4 pillar averages -- mirrors the Overall Score formula."""
+    pillar_averages = []
+    for rating_col_ids in PILLARS.values():
+        scores = []
+        for col_id in rating_col_ids:
+            raw = values.get(col_id)
+            if raw in (None, ""):
+                continue
+            try:
+                scores.append(float(raw))
+            except ValueError:
+                continue
+        if scores:
+            pillar_averages.append(sum(scores) / len(scores))
+    if not pillar_averages:
+        return None
+    return sum(pillar_averages) / len(pillar_averages)
+
+
+def create_coaching_case(item: dict, values: dict, needed_labels: list[str], score: float, token: str) -> None:
+    employee = values.get(COL_EMPLOYEE_NAME) or item["name"]
+    review_period = values.get(COL_REVIEW_PERIOD) or ""
+    source_url = SCORECARD_URL_TEMPLATE.format(board=BOARD_ID, item=item["id"])
+
+    column_values = {
+        "text_mm5330cv": employee,
+        "text_mm53yw1r": review_period,
+        "dropdown_mm53dhkh": {"labels": needed_labels},
+        "numeric_mm53jkg9": str(round(score, 2)),
+        "link_mm53f1dt": {"url": source_url, "text": "Open review"},
+    }
+    mutation = """
+    mutation ($boardId: ID!, $itemName: String!, $columnValues: JSON!) {
+      create_item(board_id: $boardId, item_name: $itemName, column_values: $columnValues, create_labels_if_missing: true) {
+        id
+      }
+    }
+    """
+    variables = {
+        "boardId": str(COACHING_BOARD_ID),
+        "itemName": f"{employee} — Coaching Case",
+        "columnValues": json.dumps(column_values),
+    }
+    run_query(mutation, variables, token)
+    flag_scorecard_item(item["id"], COL_COACHING_CASE_CREATED, token)
+
+
+def create_pip(item: dict, values: dict, needed_labels: list[str], score: float, token: str) -> None:
+    employee = values.get(COL_EMPLOYEE_NAME) or item["name"]
+    review_date = values.get(COL_REVIEW_DATE) or ""
+    source_url = SCORECARD_URL_TEMPLATE.format(board=BOARD_ID, item=item["id"])
+
+    column_values = {
+        "text_mm53f4qw": employee,
+        "numeric_mm53h2we": str(round(score, 2)),
+        "dropdown_mm536yz3": {"labels": needed_labels},
+        "link_mm53bgjf": {"url": source_url, "text": "Open review"},
+    }
+    if review_date:
+        column_values["date_mm53whmp"] = {"date": review_date}
+
+    mutation = """
+    mutation ($boardId: ID!, $itemName: String!, $columnValues: JSON!) {
+      create_item(board_id: $boardId, item_name: $itemName, column_values: $columnValues, create_labels_if_missing: true) {
+        id
+      }
+    }
+    """
+    variables = {
+        "boardId": str(PIP_BOARD_ID),
+        "itemName": f"{employee} — PIP",
+        "columnValues": json.dumps(column_values),
+    }
+    run_query(mutation, variables, token)
+    flag_scorecard_item(item["id"], COL_PIP_CREATED, token)
+
+
+def flag_scorecard_item(item_id: str, checkbox_col: str, token: str) -> None:
+    """Mark a checkbox true on the scorecard item so we never duplicate-create."""
+    mutation = """
+    mutation ($boardId: ID!, $itemId: ID!, $columnId: String!, $value: JSON!) {
+      change_column_value(
+        board_id: $boardId,
+        item_id: $itemId,
+        column_id: $columnId,
+        value: $value
+      ) {
+        id
+      }
+    }
+    """
+    variables = {
+        "boardId": str(BOARD_ID),
+        "itemId": str(item_id),
+        "columnId": checkbox_col,
+        "value": json.dumps({"checked": "true"}),
+    }
+    run_query(mutation, variables, token)
+
+
 def main() -> None:
     token = get_token()
     items = fetch_items(token)
     print(f"Checked {len(items)} item(s) on board {BOARD_ID}")
 
     for item in items:
+        values = {cv["id"]: cv["text"] for cv in item["column_values"]}
+
         needed = set(compute_labels(item))
         existing = current_labels(item)
 
-        if needed == existing:
-            print(f"  [{item['name']}] no change needed (Coaching Areas: {sorted(existing)})")
-            continue
+        if needed != existing:
+            update_coaching_areas(item["id"], sorted(needed), token)
+            print(f"  [{item['name']}] Coaching Areas: {sorted(existing)} -> {sorted(needed)}")
+        else:
+            print(f"  [{item['name']}] Coaching Areas unchanged ({sorted(existing)})")
 
-        update_coaching_areas(item["id"], sorted(needed), token)
-        print(
-            f"  [{item['name']}] Coaching Areas: {sorted(existing)} -> {sorted(needed)}"
-        )
+        score = overall_score(item, values)
+        if score is None:
+            continue  # no ratings answered yet at all, nothing to classify
+
+        already_coaching = bool(values.get(COL_COACHING_CASE_CREATED))
+        already_pip = bool(values.get(COL_PIP_CREATED))
+
+        if COACHING_LOW <= score < COACHING_HIGH and not already_coaching:
+            create_coaching_case(item, values, sorted(needed), score, token)
+            print(f"  [{item['name']}] Created Coaching Case (score {score:.2f})")
+        elif score < PIP_THRESHOLD and not already_pip:
+            create_pip(item, values, sorted(needed), score, token)
+            print(f"  [{item['name']}] Created PIP (score {score:.2f})")
 
     print("Done.")
 
