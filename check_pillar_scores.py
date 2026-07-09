@@ -37,6 +37,16 @@ PILLAR_LABELS = {
     COL_COLLABORATION: "Collaboration",
 }
 
+# The Coaching Areas dropdown column stores selections as label IDs, not label
+# text, in the raw API. These IDs come from the column's own settings on the
+# board (Coaching Areas -> Edit Labels) and must match exactly.
+LABEL_IDS = {
+    "Delivery": 1,
+    "Quality": 2,
+    "Communication and Ownership": 3,
+    "Collaboration": 4,
+}
+
 THRESHOLD = 3.0
 
 
@@ -109,8 +119,13 @@ def current_labels(item: dict) -> set[str]:
 
 
 def update_coaching_areas(item_id: str, labels: list[str], token: str) -> None:
-    """Overwrite the Coaching Areas dropdown with exactly the given labels."""
-    value = {"labels": labels} if labels else {"labels": []}
+    """Overwrite the Coaching Areas dropdown with exactly the given labels.
+
+    The raw API expects {"ids": [<label id>, ...]}, not label text -- this
+    was the bug in the first version of this script.
+    """
+    ids = [LABEL_IDS[label] for label in labels if label in LABEL_IDS]
+    value = {"ids": ids}
     mutation = """
     mutation ($boardId: ID!, $itemId: ID!, $columnId: String!, $value: JSON!) {
       change_column_value(
