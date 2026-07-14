@@ -294,6 +294,36 @@ def compute_labels(cfg: dict, values: dict) -> list[str]:
     return needed
 
 
+def pillar_averages(cfg: dict, values: dict) -> dict[str, float]:
+    """Returns {pillar_label: average_score} for every pillar that has at
+    least one answered rating."""
+    result = {}
+    for label, rating_col_ids in cfg["pillars"].items():
+        scores = []
+        for col_id in rating_col_ids:
+            raw = values.get(col_id)
+            if raw in (None, ""):
+                continue
+            try:
+                scores.append(float(raw))
+            except ValueError:
+                continue
+        if scores:
+            result[label] = sum(scores) / len(scores)
+    return result
+
+
+def lowest_pillar_labels(cfg: dict, values: dict) -> list[str]:
+    """Returns the pillar(s) tied for the lowest score -- used as a fallback
+    for Coaching Areas when someone lands in the Coaching range overall but
+    no single pillar actually fails the <3 threshold. Ties are all included."""
+    averages = pillar_averages(cfg, values)
+    if not averages:
+        return []
+    lowest = min(averages.values())
+    return [label for label, avg in averages.items() if avg == lowest]
+
+
 def overall_score(cfg: dict, values: dict) -> float | None:
     pillar_averages = []
     for rating_col_ids in cfg["pillars"].values():
@@ -456,6 +486,20 @@ def process_scorecard(cfg: dict, token: str) -> None:
         values = {cv["id"]: cv["text"] for cv in item["column_values"]}
 
         needed = set(compute_labels(cfg, values))
+
+        score = overall_score(cfg, values)
+
+        # If overall lands in the Coaching range but no pillar actually
+        # failed the <3 threshold, fall back to flagging the lowest-scoring
+        # pillar(s) so Coaching Areas is never empty for a case that's
+        # about to get a Coaching Case created.
+        if (
+            score is not None
+            and not needed
+            and cfg["coaching_low"] <= score < cfg["coaching_high"]
+        ):
+            needed = set(lowest_pillar_labels(cfg, values))
+
         existing = current_labels(cfg, values)
         if needed != existing:
             update_coaching_areas(cfg, item["id"], sorted(needed), token)
@@ -463,7 +507,6 @@ def process_scorecard(cfg: dict, token: str) -> None:
         else:
             print(f"  [{cfg['name']}][{item['name']}] Coaching Areas unchanged ({sorted(existing)})")
 
-        score = overall_score(cfg, values)
         if score is None:
             continue
 
