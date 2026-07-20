@@ -220,8 +220,9 @@ def check_contract_expirations():
 
     employees = get_employees_with_contracts()
 
-    expired = []
-    expiring_30 = []
+    expired = []       # ⚫ black — past due
+    expiring_30 = []    # 🔴 red — expiring within 30 days
+    expiring_60 = []    # 🟡 amber — expiring within 60 days
 
     for emp in employees:
         try:
@@ -234,12 +235,14 @@ def check_contract_expirations():
                 expired.append(emp)
             elif days_until <= 30:
                 expiring_30.append(emp)
+            elif days_until <= 60:
+                expiring_60.append(emp)
         except ValueError:
             continue
 
-    if expired or expiring_30:
+    if expired or expiring_30 or expiring_60:
         message = "🚦 *CONTRACT EXPIRATION ALERTS* 🚦\n"
-        message += "_Showing expired contracts and those expiring within 30 days_\n\n"
+        message += "_Showing expired contracts and those expiring within 60 days_\n\n"
 
         all_alerts = []
         for emp in expired:
@@ -249,6 +252,10 @@ def check_contract_expirations():
         for emp in expiring_30:
             emp['emoji'] = '🔴'
             emp['label'] = 'EXPIRING WITHIN 30 DAYS'
+            all_alerts.append(emp)
+        for emp in expiring_60:
+            emp['emoji'] = '🟡'
+            emp['label'] = 'EXPIRING WITHIN 60 DAYS'
             all_alerts.append(emp)
 
         projects = {}
@@ -275,6 +282,7 @@ def check_contract_expirations():
         message += f"📊 *Summary*\n"
         message += f"⚫ Expired: {len(expired)}\n"
         message += f"🔴 Expiring within 30 days: {len(expiring_30)}\n"
+        message += f"🟠 Expiring within 60 days: {len(expiring_60)}\n"
         message += f"📋 Total contracts requiring action: {len(all_alerts)}\n"
         message += "━━━━━━━━━━━━━━━━━━━━━\n"
         message += "💼 Please review and take necessary action for contract renewals."
@@ -284,7 +292,7 @@ def check_contract_expirations():
         else:
             print("❌ Failed to post to Slack")
     else:
-        print("ℹ️ No contracts expiring within 30 days or expired — all clear!")
+        print("ℹ️ No contracts expiring within 60 days or expired — all clear!")
 
 if __name__ == "__main__":
     check_contract_expirations()
