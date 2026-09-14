@@ -158,7 +158,8 @@ def create_coffee_pairings():
 
     # Build message
     message = "☕ *Coffee Dates Alert!* ☕\n\n"
-    message += "New coffee groups are up! Each group's team leader will schedule the call for *Friday at 2:00 PM PH time* — here's the lineup:\n\n"
+    message += "New coffee groups are up! These are meant to be a casual chance to meet each other and build rapport across teams. "
+    message += "Each group's team leader will schedule the call for *Friday at 2:00 PM PH time* — here's the lineup:\n\n"
 
     for i, group in enumerate(groups, 1):
         leader = assign_team_leader(group)
@@ -169,6 +170,7 @@ def create_coffee_pairings():
         message += "\n"
 
     message += "_Team leaders: please send the invite for Friday 2:00 PM PH time ☕💬_\n\n"
+    message += "If you're unable to attend, please let us know here in the channel.\n\n"
     message += "Next pairings will be posted in two weeks!"
 
     # Post to Slack
