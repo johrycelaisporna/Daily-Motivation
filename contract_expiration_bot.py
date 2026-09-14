@@ -15,6 +15,7 @@ ACTIVE_GROUPS = [
     'Active Fractionalised Resources',
     'Active Billable Employees',
     'Active Billable Engineers',
+    'Active Billable Contractors',
 ]
 
 def parse_date(date_str):
