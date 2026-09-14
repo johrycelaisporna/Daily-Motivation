@@ -102,42 +102,40 @@ def get_active_employees():
 
     return employees
 
-def create_groups(employees, group_size=3):
-    """Create random groups of 3-4 people"""
+def create_groups(employees, group_size=7):
+    """Create random groups of ~group_size people.
+
+    Any remainder smaller than group_size gets folded into the existing
+    groups (round-robin) instead of forming its own small leftover group,
+    so no group ends up with just 1-2 people.
+    """
     random.shuffle(employees)
     groups = []
 
-    i = 0
-    while i < len(employees):
-        # Calculate how many people are left
-        remaining = len(employees) - i
+    num_full_groups = len(employees) // group_size
+    remainder = len(employees) % group_size
 
-        # If 4 or more people left, make a group of 3 or 4
-        if remaining >= 4:
-            # Alternate between groups of 3 and 4
-            size = 4 if len(groups) % 2 == 0 else 3
-            groups.append(employees[i:i+size])
-            i += size
-        # If exactly 3 people left, make a group of 3
-        elif remaining == 3:
-            groups.append(employees[i:i+3])
-            i += 3
-        # If 2 people left, add them to the last group
-        elif remaining == 2:
-            if groups:
-                groups[-1].extend(employees[i:i+2])
-            else:
-                groups.append(employees[i:i+2])
-            break
-        # If 1 person left, add to last group
-        else:
-            if groups:
-                groups[-1].append(employees[i])
-            else:
-                groups.append([employees[i]])
-            break
+    # Handle the edge case where there aren't even enough people for one group
+    if num_full_groups == 0:
+        return [employees]
+
+    i = 0
+    for _ in range(num_full_groups):
+        groups.append(employees[i:i + group_size])
+        i += group_size
+
+    # Distribute any leftover people round-robin across the groups
+    leftover = employees[i:]
+    for idx, person in enumerate(leftover):
+        groups[idx % len(groups)].append(person)
 
     return groups
+
+
+def assign_team_leader(group):
+    """Randomly pick one person in the group to be the team leader
+    responsible for scheduling the group's coffee call."""
+    return random.choice(group)
 
 def create_coffee_pairings():
     """Create and post coffee date pairings"""
@@ -160,15 +158,17 @@ def create_coffee_pairings():
 
     # Build message
     message = "☕ *Coffee Dates Alert!* ☕\n\n"
-    message += "It's time to meet at 8:30 AM on Thursday! Here are your random coffee groups:\n\n"
+    message += "New coffee groups are up! Each group's team leader will schedule the call for *Friday at 2:00 PM PH time* — here's the lineup:\n\n"
 
     for i, group in enumerate(groups, 1):
+        leader = assign_team_leader(group)
         message += f"*Group {i}:*\n"
         for person in group:
-            message += f"  • {person}\n"
+            tag = " (Team Leader — please schedule the call for Friday 2:00 PM PH time 📅)" if person == leader else ""
+            message += f"  • {person}{tag}\n"
         message += "\n"
 
-    message += "_Connect with your group this Thursday at 8:30 AM for coffee ☕🍕💬_\n\n"
+    message += "_Team leaders: please send the invite for Friday 2:00 PM PH time ☕💬_\n\n"
     message += "Next pairings will be posted in two weeks!"
 
     # Post to Slack
