@@ -158,7 +158,8 @@ def create_coffee_pairings():
 
     # Build message
     message = "☕ *Coffee Dates Alert!* ☕\n\n"
-    message += "New coffee groups are up! These are meant to be a casual chance to meet each other and build rapport across teams. "
+    message += "New coffee groups are up! These are optional, but we'd really encourage you to join — "
+    message += "it's a great way to meet each other and build rapport across teams. "
     message += "Each group's team leader will schedule the call for *Friday at 2:00 PM PH time* — here's the lineup:\n\n"
 
     for i, group in enumerate(groups, 1):
@@ -170,7 +171,21 @@ def create_coffee_pairings():
         message += "\n"
 
     message += "_Team leaders: please send the invite for Friday 2:00 PM PH time ☕💬_\n\n"
-    message += "If you're unable to attend, please let us know here in the channel.\n\n"
+
+    message += "*💡 Not sure what to talk about? Pick a topic (or two):*\n"
+    message += "  • What's something you're into outside of work?\n"
+    message += "  • Best trip you've taken or want to take\n"
+    message += "  • What's a show/movie/game you're currently obsessed with?\n"
+    message += "  • Favorite local food spot or dish\n"
+    message += "  • What's something you're learning right now?\n"
+    message += "  • Any pets? Show us a photo!\n\n"
+
+    message += "*Guidelines:*\n"
+    message += "  • Keep it casual — this isn't a status update or work meeting\n"
+    message += "  • Cameras on if you're comfortable, but not required\n"
+    message += "  • Aim for ~20-30 minutes\n\n"
+
+    message += "If you're unable to make it, no worries — just give us a heads up here in the channel.\n\n"
     message += "Next pairings will be posted in two weeks!"
 
     # Post to Slack
